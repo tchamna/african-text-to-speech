@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AfricanSpeaks - Voice Translator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max_width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2c3e50; }
+        .controls { margin: 30px 0; }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+        #recordBtn {
+            background-color: #e74c3c;
+            color: white;
+        }
+        #recordBtn.recording {
+            background-color: #c0392b;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .dropzone {
+            border: 3px dashed #3498db;
+            border-radius: 15px;
+            padding: 40px;
+            margin: 20px 0;
+            text-align: center;
+            background-color: #f8f9fa;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .dropzone:hover {
+            background-color: #e3f2fd;
+            border-color: #2980b9;
+        }
+        .dropzone.dragover {
+            background-color: #d1ecf1;
+            border-color: #0c5460;
+            transform: scale(1.02);
+        }
+        .result-box {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            display: none;
+        }
+        .transcription {
+            font-style: italic;
+            color: #7f8c8d;
+            margin-bottom: 15px;
+        }
+        .translation {
+            font-size: 24px;
+            font-weight: bold;
+            color: #27ae60;
+            margin-bottom: 15px;
+        }
+        .status {
+            margin-top: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AfricanSpeaks 🎙️</h1>
+        <p>Parlez en français pour obtenir la traduction en Nufi.</p>
+        <p style="font-size: 14px; color: #7f8c8d;">Speak in French to get the Nufi translation.</p>
+        <div style="background-color: #fff3cd; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 14px;">
+            <strong>📝 Tips:</strong> Click record, wait 1 second, then speak clearly for 2-3 seconds. Allow microphone access when prompted.
+        </div>
+        
+        <div class="controls">
+            <div style="margin-bottom: 15px;">
+                <label for="languageSelect" style="font-weight: bold; margin-right: 10px;">🌍 Speech Language:</label>
+                <select id="languageSelect" style="padding: 8px 15px; font-size: 14px; border-radius: 5px; border: 2px solid #3498db; cursor: pointer;">
+                    <option value="auto">Auto-detect</option>
+                    <option value="fr" selected>French (Français)</option>
+                    <option value="en">English</option>
+                    <option value="es">Spanish (Español)</option>
+                    <option value="de">German (Deutsch)</option>
+                    <option value="it">Italian (Italiano)</option>
+                    <option value="pt">Portuguese (Português)</option>
+                </select>
+            </div>
+            <button id="recordBtn">🎤 Start Recording</button>
+        </div>
+        
+        <div class="dropzone" id="dropzone">
+            <h3 style="color: #3498db; margin: 10px 0;">📁 Drag & Drop Audio File Here</h3>
+            <p style="color: #7f8c8d; margin: 10px 0;">or click to browse</p>
+            <p style="font-size: 12px; color: #95a5a6;">Supports MP3, WAV, WebM, M4A and other audio formats</p>
+            <input type="file" id="audioUpload" accept="audio/*,.mp3,.wav,.webm,.m4a" style="display: none;">
+        </div>
+
+        <div id="status" class="status">Ready</div>
+
+        <div id="result" class="result-box">
+            <h3>🎯 Three-Way Model Comparison:</h3>
+            
+            <!-- Whisper Small Result -->
+            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #ffc107;">
+                <h4 style="margin: 0 0 10px 0; color: #856404;">🟡 Whisper Small (~466MB - Fast)</h4>
+                <p style="margin: 5px 0;"><strong>Transcription:</strong> <span id="smallText" class="transcription"></span></p>
+                <p style="margin: 5px 0;"><strong>Matched French:</strong> <span id="smallMatch" style="font-weight: bold; color: #2c3e50;"></span></p>
+                <p style="margin: 5px 0;"><strong>Nufi Translation:</strong> <span id="smallTranslation" class="translation"></span></p>
+            </div>
+            
+            <!-- Whisper Medium Result -->
+            <div style="background: #e8f4f8; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #3498db;">
+                <h4 style="margin: 0 0 10px 0; color: #2980b9;">🔵 Whisper Medium (~1.5GB - Balanced)</h4>
+                <p style="margin: 5px 0;"><strong>Transcription:</strong> <span id="mediumText" class="transcription"></span></p>
+                <p style="margin: 5px 0;"><strong>Matched French:</strong> <span id="mediumMatch" style="font-weight: bold; color: #2c3e50;"></span></p>
+                <p style="margin: 5px 0;"><strong>Nufi Translation:</strong> <span id="mediumTranslation" class="translation"></span></p>
+            </div>
+            
+            <!-- Whisper Large-v3 Result -->
+            <div style="background: #e8f4e8; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #27ae60;">
+                <h4 style="margin: 0 0 10px 0; color: #229954;">🟢 Whisper Large-v3 (~2.87GB - Most Accurate)</h4>
+                <p style="margin: 5px 0;"><strong>Transcription:</strong> <span id="largeText" class="transcription"></span></p>
+                <p style="margin: 5px 0;"><strong>Matched French:</strong> <span id="largeMatch" style="font-weight: bold; color: #2c3e50;"></span></p>
+                <p style="margin: 5px 0;"><strong>Nufi Translation:</strong> <span id="largeTranslation" class="translation"></span></p>
+            </div>
+            
+            <!-- Comparison -->
+            <div id="comparisonResult" style="background: #d1ecf1; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #17a2b8;">
+                <h4 style="margin: 0 0 10px 0; color: #0c5460;">⚖️ Comparison</h4>
+                <p id="comparisonText" style="margin: 5px 0;"></p>
+            </div>
+            
+            <audio id="audioPlayer" controls style="width: 100%; margin-top: 10px; display: none;"></audio>
+            
+            <div id="noMatch" style="display:none; color: #e67e22;">
+                No close match found in dictionary for either model.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const recordBtn = document.getElementById('recordBtn');
+        const statusDiv = document.getElementById('status');
+        const resultDiv = document.getElementById('result');
+        const transcriptionText = document.getElementById('transcriptionText');
+        const matchedFrench = document.getElementById('matchedFrench');
+        const translationText = document.getElementById('translationText');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const matchResult = document.getElementById('matchResult');
+        const noMatch = document.getElementById('noMatch');
+
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        recordBtn.addEventListener('click', toggleRecording);
+        
+        // File upload and drag-drop handlers
+        const audioUpload = document.getElementById('audioUpload');
+        const dropzone = document.getElementById('dropzone');
+        
+        audioUpload.addEventListener('change', handleFileUpload);
+        
+        // Click to browse
+        dropzone.addEventListener('click', () => {
+            audioUpload.click();
+        });
+        
+        // Drag and drop events
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add('dragover');
+        });
+        
+        dropzone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('dragover');
+        });
+        
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                // Check if it's an audio file
+                if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|webm|m4a|ogg|flac|aac)$/i)) {
+                    processUploadedFile(file);
+                } else {
+                    statusDiv.textContent = 'Error: Please drop an audio file';
+                }
+            }
+        });
+        
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            processUploadedFile(file);
+            
+            // Reset file input
+            event.target.value = '';
+        }
+        
+        async function processUploadedFile(file) {
+            statusDiv.textContent = 'Processing uploaded file: ' + file.name;
+            resultDiv.style.display = 'none';
+            
+            const formData = new FormData();
+            formData.append('audio', file);
+            
+            // Add selected language
+            const language = document.getElementById('languageSelect').value;
+            formData.append('language', language);
+            
+            try {
+                const response = await fetch('/process_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayResult(data);
+                    statusDiv.textContent = 'Done';
+                } else {
+                    statusDiv.textContent = 'Error: ' + (data.error || 'Unknown error');
+                }
+            } catch (err) {
+                console.error('Error processing file:', err);
+                statusDiv.textContent = 'Network error occurred.';
+            }
+        }
+
+        async function toggleRecording() {
+            if (!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    
+                    mediaRecorder.ondataavailable = (event) => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = sendAudio;
+
+                    audioChunks = [];
+                    mediaRecorder.start();
+                    isRecording = true;
+                    recordBtn.textContent = '⏹️ Stop Recording';
+                    recordBtn.classList.add('recording');
+                    statusDiv.textContent = 'Recording...';
+                    resultDiv.style.display = 'none';
+                } catch (err) {
+                    console.error('Error accessing microphone:', err);
+                    statusDiv.textContent = 'Error: Could not access microphone. Please allow permissions.';
+                }
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                recordBtn.textContent = '🎤 Start Recording';
+                recordBtn.classList.remove('recording');
+                statusDiv.textContent = 'Processing...';
+            }
+        }
+
+        async function sendAudio() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+            
+            // Add selected language
+            const language = document.getElementById('languageSelect').value;
+            formData.append('language', language);
+
+            try {
+                const response = await fetch('/process_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayResult(data);
+                    statusDiv.textContent = 'Done';
+                } else {
+                    statusDiv.textContent = 'Error: ' + (data.error || 'Unknown error');
+                }
+            } catch (err) {
+                console.error('Error sending audio:', err);
+                statusDiv.textContent = 'Network error occurred.';
+            }
+        }
+
+        // Audio playback functions
+        function playWordAudio(audioUrl) {
+            if (!audioUrl) {
+                console.log('No audio available for this word');
+                return;
+            }
+            const audio = new Audio(audioUrl);
+            audio.play().catch(err => {
+                console.error('Error playing audio:', err);
+            });
+        }
+        
+        function playSentenceAudio(audioUrl) {
+            if (!audioUrl) {
+                console.log('No audio available for this sentence');
+                return;
+            }
+            const audio = new Audio(audioUrl);
+            audio.play().catch(err => {
+                console.error('Error playing sentence audio:', err);
+            });
+        }
+        
+        function renderNufiWithAudio(match, containerElement) {
+            containerElement.innerHTML = ''; // Clear
+            
+            if (!match) {
+                containerElement.textContent = 'N/A';
+                return;
+            }
+            
+            const nufiText = match.Nufi || '';
+            const wordAudio = match.word_audio || [];
+            const sentenceAudioUrl = match.sentence_audio_url;
+            
+            // Create clickable words
+            if (wordAudio.length > 0) {
+                wordAudio.forEach((wordObj, index) => {
+                    const wordSpan = document.createElement('span');
+                    wordSpan.textContent = wordObj.word;
+                    wordSpan.className = 'nufi-word';
+                    
+                    if (wordObj.audio_url) {
+                        wordSpan.style.cursor = 'pointer';
+                        wordSpan.style.color = '#3498db';
+                        wordSpan.style.textDecoration = 'underline';
+                        wordSpan.style.textDecorationStyle = 'dotted';
+                        wordSpan.title = 'Click to hear pronunciation';
+                        wordSpan.onclick = () => playWordAudio(wordObj.audio_url);
+                    }
+                    
+                    containerElement.appendChild(wordSpan);
+                    
+                    // Add space between words (except last)
+                    if (index < wordAudio.length - 1) {
+                        containerElement.appendChild(document.createTextNode(' '));
+                    }
+                });
+            } else {
+                containerElement.textContent = nufiText;
+            }
+            
+            // Add sentence play button
+            if (sentenceAudioUrl) {
+                const playBtn = document.createElement('button');
+                playBtn.innerHTML = '🔊 Play Full Sentence';
+                playBtn.style.marginLeft = '10px';
+                playBtn.style.padding = '5px 10px';
+                playBtn.style.fontSize = '12px';
+                playBtn.style.cursor = 'pointer';
+                playBtn.style.backgroundColor = '#27ae60';
+                playBtn.style.color = 'white';
+                playBtn.style.border = 'none';
+                playBtn.style.borderRadius = '4px';
+                playBtn.onclick = () => playSentenceAudio(sentenceAudioUrl);
+                containerElement.appendChild(document.createTextNode(' '));
+                containerElement.appendChild(playBtn);
+            }
+        }
+
+        function displayResult(data) {
+            resultDiv.style.display = 'block';
+            
+            // Whisper Small results
+            const smallText = document.getElementById('smallText');
+            const smallMatch = document.getElementById('smallMatch');
+            const smallTranslation = document.getElementById('smallTranslation');
+            
+            smallText.textContent = data.transcription_small || 'N/A';
+            if (data.match_small) {
+                smallMatch.textContent = data.match_small.French || 'N/A';
+                renderNufiWithAudio(data.match_small, smallTranslation);
+                // Auto-play sentence audio for exact or multi-word match (score >= 95)
+                if ((data.match_small.match_score >= 95 && data.match_small.sentence_audio_url &&
+                     (data.match_small.match_type === 'exact' || data.match_small.match_type === 'multi-word')) ) {
+                    setTimeout(() => playSentenceAudio(data.match_small.sentence_audio_url), 300);
+                }
+            } else {
+                smallMatch.textContent = 'No match';
+                smallTranslation.textContent = 'N/A';
+            }
+            
+            // Whisper Medium results
+            const mediumText = document.getElementById('mediumText');
+            const mediumMatch = document.getElementById('mediumMatch');
+            const mediumTranslation = document.getElementById('mediumTranslation');
+            
+            mediumText.textContent = data.transcription_medium || 'N/A';
+            if (data.match_medium) {
+                mediumMatch.textContent = data.match_medium.French || 'N/A';
+                renderNufiWithAudio(data.match_medium, mediumTranslation);
+                // Auto-play sentence audio for exact or multi-word match (only if Small didn't already play)
+                if ((data.match_medium.match_score >= 95 && data.match_medium.sentence_audio_url &&
+                     (data.match_medium.match_type === 'exact' || data.match_medium.match_type === 'multi-word')) &&
+                    (!data.match_small || data.match_small.match_score < 95 ||
+                     (data.match_small.match_type !== 'exact' && data.match_small.match_type !== 'multi-word')) ) {
+                    setTimeout(() => playSentenceAudio(data.match_medium.sentence_audio_url), 300);
+                }
+            } else {
+                mediumMatch.textContent = 'No match';
+                mediumTranslation.textContent = 'N/A';
+            }
+            
+            // Whisper Large-v3 results
+            const largeText = document.getElementById('largeText');
+            const largeMatch = document.getElementById('largeMatch');
+            const largeTranslation = document.getElementById('largeTranslation');
+            
+            largeText.textContent = data.transcription_large || 'N/A';
+            if (data.match_large) {
+                largeMatch.textContent = data.match_large.French || 'N/A';
+                renderNufiWithAudio(data.match_large, largeTranslation);
+                // Auto-play sentence audio for exact or multi-word match (only if Small and Medium didn't already play)
+                if ((data.match_large.match_score >= 95 && data.match_large.sentence_audio_url &&
+                     (data.match_large.match_type === 'exact' || data.match_large.match_type === 'multi-word')) &&
+                    (!data.match_small || data.match_small.match_score < 95 ||
+                     (data.match_small.match_type !== 'exact' && data.match_small.match_type !== 'multi-word')) &&
+                    (!data.match_medium || data.match_medium.match_score < 95 ||
+                     (data.match_medium.match_type !== 'exact' && data.match_medium.match_type !== 'multi-word')) ) {
+                    setTimeout(() => playSentenceAudio(data.match_large.sentence_audio_url), 300);
+                }
+            } else {
+                largeMatch.textContent = 'No match';
+                largeTranslation.textContent = 'N/A';
+            }
+            
+            // Comparison
+            const comparisonText = document.getElementById('comparisonText');
+            const small = data.transcription_small || '';
+            const medium = data.transcription_medium || '';
+            const large = data.transcription_large || '';
+            
+            if (small.toLowerCase() === medium.toLowerCase() && medium.toLowerCase() === large.toLowerCase()) {
+                comparisonText.innerHTML = '✅ <strong>All three models agree!</strong><br>Transcription: "' + large + '"';
+                comparisonText.style.color = '#155724';
+            } else if (medium.toLowerCase() === large.toLowerCase()) {
+                comparisonText.innerHTML = '⚠️ <strong>Medium and Large-v3 agree</strong> (Small differs)<br>' +
+                    'Small: "' + small + '"<br>' +
+                    'Medium & Large: "' + medium + '"';
+                comparisonText.style.color = '#0c5460';
+            } else {
+                comparisonText.innerHTML = '⚠️ <strong>Different results</strong><br>' +
+                    'Small: "' + small + '"<br>' +
+                    'Medium: "' + medium + '"<br>' +
+                    'Large-v3: "' + large + '"';
+                comparisonText.style.color = '#856404';
+            }
+            
+            // Auto-play sentence audio if any two models agree on the French match AND both have exact match (score 100)
+            const frenchSmall = data.match_small?.French?.toLowerCase().trim();
+            const frenchMedium = data.match_medium?.French?.toLowerCase().trim();
+            const frenchLarge = data.match_large?.French?.toLowerCase().trim();
+            let audioUrl = null;
+            if (frenchSmall && frenchMedium && frenchSmall === frenchMedium &&
+                data.match_small?.match_score === 100 && data.match_medium?.match_score === 100) {
+                audioUrl = data.match_small?.sentence_audio_url || data.match_medium?.sentence_audio_url;
+            }
+            else if (frenchSmall && frenchLarge && frenchSmall === frenchLarge &&
+                data.match_small?.match_score === 100 && data.match_large?.match_score === 100) {
+                audioUrl = data.match_small?.sentence_audio_url || data.match_large?.sentence_audio_url;
+            }
+            else if (frenchMedium && frenchLarge && frenchMedium === frenchLarge &&
+                data.match_medium?.match_score === 100 && data.match_large?.match_score === 100) {
+                audioUrl = data.match_medium?.sentence_audio_url || data.match_large?.sentence_audio_url;
+            }
+            if (audioUrl) {
+                // Only play once per result
+                if (!window._lastAutoPlayed || window._lastAutoPlayed !== audioUrl) {
+                    window._lastAutoPlayed = audioUrl;
+                    setTimeout(() => playSentenceAudio(audioUrl), 300);
+                }
+            }
+            
+            // Show/hide no match message
+            if (!data.match_small && !data.match_medium && !data.match_large) {
+                document.getElementById('noMatch').style.display = 'block';
+            } else {
+                document.getElementById('noMatch').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

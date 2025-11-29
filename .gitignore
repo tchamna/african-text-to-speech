@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.env
+.venv/
+venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Audio uploads
+uploads/
+audio/
+*.csv 
+
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# Misc
+*.sqlite3
+*.db
+*.bak
+*.swp
+*.swo
+
+# Model files
+*.pt
+*.bin
+*.pkl
+
+# Large assets
+assets/*.bin
+assets/*.pkl
