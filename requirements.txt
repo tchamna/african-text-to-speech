@@ -6,4 +6,6 @@ faiss-cpu
 numpy
 gunicorn
 azure-storage-blob
-soundfile
+# Pin soundfile to a known working version to avoid wheel/build issues
+soundfile==0.12.1
+cffi>=1.15.1
