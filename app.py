@@ -12,7 +12,7 @@ import soundfile as sf
 
 app = Flask(__name__)
 
-# Azure Blob Storage base URLs for audio files (fallback when local files don't exist)
+az storage account show-connection-string --name africanobjectaudio --resource-group rag-ai-foundations-demo-rg --query connectionString --output tsv# Azure Blob Storage base URLs for audio files (fallback when local files don't exist)
 AZURE_BLOB_BASE_URL = "https://africanobjectaudio.blob.core.windows.net"
 PHRASEBOOK_AUDIO_URL = f"{AZURE_BLOB_BASE_URL}/nufi-phrasebook-audio"
 DICTIONARY_AUDIO_URL = f"{AZURE_BLOB_BASE_URL}/word-dictionary-audio"
@@ -324,6 +324,14 @@ def process_audio():
     print(f"Audio file saved: {file_ext}, size: {file_size} bytes")
     print(f"Language setting: {language if language else 'auto-detect'}")
     
+    # Check audio file properties
+    try:
+        import soundfile as sf
+        info = sf.info(temp_input)
+        print(f"Audio info: format={info.format}, subtype={info.subtype}, samplerate={info.samplerate}, channels={info.channels}, duration={info.duration:.2f}s")
+    except Exception as e:
+        print(f"Audio info error: {e}")
+    
     if file_size < 1000:  # Less than 1KB is likely empty/silent
         return jsonify({
             'error': 'Audio file is too small. Please record for at least 2-3 seconds and speak clearly.',
@@ -339,7 +347,12 @@ def process_audio():
         result = whisper_model.transcribe(temp_input, language=language, fp16=False, verbose=False)
         transcription = result["text"].strip()
         detected_lang = result.get("language", "unknown")
-        print(f"   Transcription: {transcription} (detected: {detected_lang})")
+        print(f"   Transcription: '{transcription}' (detected: {detected_lang})")
+        print(f"   Full result keys: {list(result.keys())}")
+        if "segments" in result:
+            print(f"   Segments: {len(result['segments'])}")
+            for i, seg in enumerate(result["segments"][:3]):  # First 3 segments
+                print(f"     Segment {i}: '{seg['text']}' (start: {seg['start']:.2f}, end: {seg['end']:.2f})")
         
         # Check if transcription is empty
         if not transcription:
