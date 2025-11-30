@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Debug Match UI - AfricanVoice</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f5f5f7; color:#222; }
+        .card { max-width:900px; margin:30px auto; background:white; padding:20px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
+        input[type=text] { width:80%; padding:10px; font-size:16px; border:1px solid #ccd; border-radius:6px; }
+        button { padding:10px 16px; margin-left:8px; background:#3498db; color:white; border:none; border-radius:6px; cursor:pointer; }
+        pre { background:#f4f6f8; padding:12px; border-radius:6px; overflow:auto; }
+        .match { margin-top:12px; padding:12px; border-radius:6px; background:#fbfbfc; border:1px solid #eee; }
+        .muted { color:#666; font-size:13px }
+        .top-match { margin-bottom:8px; padding:8px; border-radius:4px; background:#fff; border:1px solid #e6e6e6 }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Debug Match UI</h2>
+        <p class="muted">Type a text query and press <strong>Run</strong>. This calls <code>/debug_match</code> and shows the best hybrid match and top semantic matches.</p>
+
+        <div>
+            <input id="qinput" type="text" placeholder="Enter text to debug (e.g. Je suis chanceux.)" />
+            <button id="runBtn">Run</button>
+        </div>
+
+        <div id="status" class="muted" style="margin-top:8px">Ready</div>
+
+        <div id="resultArea" style="margin-top:18px; display:none">
+            <h3>Best Match</h3>
+            <div id="bestMatch" class="match"></div>
+
+            <h3 style="margin-top:16px">Top Semantic Matches</h3>
+            <div id="topMatches"></div>
+
+            <h3 style="margin-top:16px">Raw JSON</h3>
+            <pre id="rawJson"></pre>
+        </div>
+    </div>
+
+    <script>
+        const runBtn = document.getElementById('runBtn');
+        const qinput = document.getElementById('qinput');
+        const status = document.getElementById('status');
+        const resultArea = document.getElementById('resultArea');
+        const bestMatchEl = document.getElementById('bestMatch');
+        const topMatchesEl = document.getElementById('topMatches');
+        const rawJsonEl = document.getElementById('rawJson');
+
+        // Pre-fill from query param if present
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('text')) qinput.value = params.get('text');
+
+        runBtn.addEventListener('click', async () => {
+            const text = qinput.value.trim();
+            if (!text) return;
+            status.textContent = 'Querying...';
+            resultArea.style.display = 'none';
+
+            try {
+                const url = '/debug_match?text=' + encodeURIComponent(text);
+                const res = await fetch(url);
+                const data = await res.json();
+                status.textContent = res.ok ? 'OK' : 'Error';
+
+                // Render best match
+                const best = data.best_match;
+                if (best) {
+                    let html = `<strong>French:</strong> ${best.French || 'N/A'}<br>`;
+                    html += `<strong>Match score:</strong> ${best.match_score ? best.match_score.toFixed(2) : 'N/A'}%<br>`;
+                    html += `<strong>Type:</strong> ${best.match_type || 'N/A'}<br>`;
+                    html += `<strong>Nufi:</strong> ${best.Nufi || 'N/A'}<br>`;
+                    if (best.sentence_audio_url) html += `<button onclick="(new Audio('${best.sentence_audio_url}')).play()">🔊 Play sentence audio</button>`;
+                    bestMatchEl.innerHTML = html;
+                } else {
+                    bestMatchEl.innerHTML = '<em>No best match</em>';
+                }
+
+                // Top matches
+                topMatchesEl.innerHTML = '';
+                if (data.top_matches && data.top_matches.length) {
+                    data.top_matches.forEach((m, i) => {
+                        const div = document.createElement('div');
+                        div.className = 'top-match';
+                        div.innerHTML = `<strong>#${i+1} (${m.match_score?m.match_score.toFixed(1):'N/A'}%)</strong> ${m.French || ''}<br><em>${m.Nufi || ''}</em>`;
+                        if (m.sentence_audio_url) {
+                            const btn = document.createElement('button');
+                            btn.textContent = '🔊 Play';
+                            btn.style.marginLeft = '8px';
+                            btn.onclick = () => (new Audio(m.sentence_audio_url)).play();
+                            div.appendChild(btn);
+                        }
+                        topMatchesEl.appendChild(div);
+                    });
+                } else {
+                    topMatchesEl.innerHTML = '<em>No top semantic matches</em>';
+                }
+
+                rawJsonEl.textContent = JSON.stringify(data, null, 2);
+                resultArea.style.display = 'block';
+            } catch (err) {
+                status.textContent = 'Network/error';
+                rawJsonEl.textContent = String(err);
+                resultArea.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

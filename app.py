@@ -432,6 +432,11 @@ def debug_match():
         'top_matches': top
     })
 
+
+@app.route('/debug')
+def debug_ui():
+    return render_template('debug.html')
+
 @app.route('/')
 def index():
     return render_template('index.html', app_mode=APP_MODE)
