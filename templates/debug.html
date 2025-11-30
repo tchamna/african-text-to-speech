@@ -20,8 +20,10 @@
         <h2>Debug Match UI</h2>
         <p class="muted">Type a text query and press <strong>Run</strong>. This calls <code>/debug_match</code> and shows the best hybrid match and top semantic matches.</p>
 
-        <div>
+        <div style="display:flex; gap:8px; align-items:center;">
             <input id="qinput" type="text" placeholder="Enter text to debug (e.g. Je suis chanceux.)" />
+            <label class="muted" for="topk" style="margin-left:6px;">Top</label>
+            <input id="topk" type="number" min="1" value="5" placeholder="e.g. 10" style="width:80px; padding:8px; border-radius:6px; border:1px solid #ccd;" title="Enter number of top semantic matches to return" />
             <button id="runBtn">Run</button>
         </div>
 
@@ -51,6 +53,14 @@
         // Pre-fill from query param if present
         const params = new URLSearchParams(window.location.search);
         if (params.has('text')) qinput.value = params.get('text');
+        if (params.has('top_k')) {
+            const tk = params.get('top_k');
+            const sel = document.getElementById('topk');
+            if (sel) {
+                // If value exists in options, select it; otherwise set value
+                if ([...sel.options].some(o => o.value === tk)) sel.value = tk; else sel.value = '5';
+            }
+        }
 
         runBtn.addEventListener('click', async () => {
             const text = qinput.value.trim();
@@ -59,7 +69,8 @@
             resultArea.style.display = 'none';
 
             try {
-                const url = '/debug_match?text=' + encodeURIComponent(text);
+                const topk = document.getElementById('topk') ? document.getElementById('topk').value : '5';
+                const url = '/debug_match?text=' + encodeURIComponent(text) + '&top_k=' + encodeURIComponent(topk);
                 const res = await fetch(url);
                 const data = await res.json();
                 status.textContent = res.ok ? 'OK' : 'Error';
@@ -103,6 +114,14 @@
                 status.textContent = 'Network/error';
                 rawJsonEl.textContent = String(err);
                 resultArea.style.display = 'block';
+            }
+        });
+
+        // Allow Enter key to trigger the Run button
+        qinput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                runBtn.click();
             }
         });
     </script>
