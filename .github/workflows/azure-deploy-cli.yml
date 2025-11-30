@@ -1,0 +1,51 @@
+name: Build and Deploy Docker Container to Azure
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      AZURE_WEBAPP_NAME: african-text-to-speech
+      ACR_NAME: africanrecognition
+      IMAGE_NAME: african-text-to-speech-app
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Build and push to ACR
+      run: |
+        az acr build \
+          --registry ${{ env.ACR_NAME }} \
+          --image ${{ env.IMAGE_NAME }}:latest \
+          --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          --platform linux \
+          --file Dockerfile \
+          .
+
+    - name: Update Web App Container Image
+      run: |
+        az webapp config container set \
+          --name ${{ env.AZURE_WEBAPP_NAME }} \
+          --resource-group rag-ai-foundations-demo-rg \
+          --docker-custom-image-name ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest \
+          --docker-registry-server-url https://${{ env.ACR_NAME }}.azurecr.io
+
+    - name: Restart Web App
+      run: |
+        az webapp restart \
+          --name ${{ env.AZURE_WEBAPP_NAME }} \
+          --resource-group rag-ai-foundations-demo-rg
+
+    - name: Deployment complete
+      run: |
+        echo "✅ Deployed to https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
