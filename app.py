@@ -51,24 +51,15 @@ def get_audio_url(audio_type, filename):
         else:
             return f'{DICTIONARY_AUDIO_URL}/{filename}'
 
-# === TRIPLE WHISPER SETUP - Load THREE Whisper models for comparison ===
-print("Loading THREE Whisper models for comparison...")
-
-# Load Whisper Small
-print("1. Loading Whisper Small model...")
-whisper_small = whisper.load_model("small")
-print("   ✓ Whisper Small loaded (~466MB)")
-
-# Load Whisper Medium
-print("2. Loading Whisper Medium model...")
-whisper_medium = whisper.load_model("medium")
-print("   ✓ Whisper Medium loaded (~1.5GB)")
-
-# Load Whisper Large-v3
-print("3. Loading Whisper Large-v3 model...")
-whisper_large = whisper.load_model("large-v3")
-print("   ✓ Whisper Large-v3 loaded (~2.87GB)")
-print("\nAll THREE Whisper models ready for comparison!")
+# === WHISPER MODEL SETUP ===
+# Use environment variable to select model size
+# Options: tiny, base, small, medium, large, large-v2, large-v3
+# Default: large-v3 for best accuracy (requires ~3GB RAM)
+# For local dev with limited RAM, set WHISPER_MODEL_SIZE=small or medium
+WHISPER_MODEL_SIZE = os.environ.get('WHISPER_MODEL_SIZE', 'large-v3')
+print(f"Loading Whisper model: {WHISPER_MODEL_SIZE}...")
+whisper_model = whisper.load_model(WHISPER_MODEL_SIZE)
+print(f"   ✓ Whisper {WHISPER_MODEL_SIZE} loaded successfully!")
 
 # Load semantic search model and index
 print("Loading semantic search model...")
@@ -341,56 +332,31 @@ def process_audio():
         }), 400
     
     try:
-        # Transcribe with ALL THREE Whisper models for comparison
+        # Transcribe with Whisper model
         lang_text = f"language: {language}" if language else "auto-detect"
-        print(f"Transcribing audio with THREE Whisper models (format: {file_ext}, {lang_text})...")
+        print(f"Transcribing audio with Whisper {WHISPER_MODEL_SIZE} (format: {file_ext}, {lang_text})...")
         
-        # Whisper Small transcription
-        print("  → Whisper Small...")
-        small_result = whisper_small.transcribe(temp_input, language=language, fp16=False, verbose=False)
-        small_text = small_result["text"].strip()
-        small_lang = small_result.get("language", "unknown")
-        print(f"     Small: {small_text} (detected: {small_lang})")
-        
-        # Whisper Medium transcription
-        print("  → Whisper Medium...")
-        medium_result = whisper_medium.transcribe(temp_input, language=language, fp16=False, verbose=False)
-        medium_text = medium_result["text"].strip()
-        medium_lang = medium_result.get("language", "unknown")
-        print(f"     Medium: {medium_text} (detected: {medium_lang})")
-        
-        # Whisper Large-v3 transcription
-        print("  → Whisper Large-v3...")
-        large_result = whisper_large.transcribe(temp_input, language=language, fp16=False, verbose=False)
-        large_text = large_result["text"].strip()
-        large_lang = large_result.get("language", "unknown")
-        print(f"     Large-v3: {large_text} (detected: {large_lang})")
+        result = whisper_model.transcribe(temp_input, language=language, fp16=False, verbose=False)
+        transcription = result["text"].strip()
+        detected_lang = result.get("language", "unknown")
+        print(f"   Transcription: {transcription} (detected: {detected_lang})")
         
         # Check if transcription is empty
-        if not small_text and not medium_text and not large_text:
+        if not transcription:
             return jsonify({
                 'error': 'No speech detected in audio. Please speak clearly and try again.',
                 'transcription': '',
-                'transcription_small': '',
-                'transcription_medium': '',
-                'transcription_large': '',
                 'match': None
             }), 400
         
-        # Find matches for all three models
-        match_small = find_closest_match(small_text) if small_text else None
-        match_medium = find_closest_match(medium_text) if medium_text else None
-        match_large = find_closest_match(large_text) if large_text else None
+        # Find match for the transcription
+        match = find_closest_match(transcription) if transcription else None
         
         response = {
-            'transcription': large_text,  # Use Large-v3 as primary (most accurate)
-            'transcription_small': small_text,
-            'transcription_medium': medium_text,
-            'transcription_large': large_text,
-            'match': match_large,
-            'match_small': match_small,
-            'match_medium': match_medium,
-            'match_large': match_large
+            'transcription': transcription,
+            'detected_language': detected_lang,
+            'model_used': WHISPER_MODEL_SIZE,
+            'match': match
         }
         return jsonify(response)
         
