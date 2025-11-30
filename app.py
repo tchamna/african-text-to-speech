@@ -12,11 +12,44 @@ import soundfile as sf
 
 app = Flask(__name__)
 
-# Configure static folder for audio files
+# Azure Blob Storage base URLs for audio files (fallback when local files don't exist)
+AZURE_BLOB_BASE_URL = "https://africanobjectaudio.blob.core.windows.net"
+PHRASEBOOK_AUDIO_URL = f"{AZURE_BLOB_BASE_URL}/nufi-phrasebook-audio"
+DICTIONARY_AUDIO_URL = f"{AZURE_BLOB_BASE_URL}/word-dictionary-audio"
+
+# Check if audio files exist locally
+LOCAL_AUDIO_DIR = 'audio'
+USE_LOCAL_AUDIO = os.path.exists(LOCAL_AUDIO_DIR) and os.path.isdir(LOCAL_AUDIO_DIR)
+
 @app.route('/audio/<path:filename>')
 def serve_audio(filename):
-    """Serve audio files from the audio directory"""
-    return send_from_directory('audio', filename)
+    """Serve audio files from local directory (for local development)"""
+    if USE_LOCAL_AUDIO and os.path.exists(os.path.join(LOCAL_AUDIO_DIR, filename)):
+        return send_from_directory(LOCAL_AUDIO_DIR, filename)
+    # If file doesn't exist locally, redirect to Azure Blob Storage
+    from flask import redirect
+    if 'nufi_phrasebook' in filename:
+        return redirect(f"{PHRASEBOOK_AUDIO_URL}/{os.path.basename(filename)}")
+    else:
+        return redirect(f"{DICTIONARY_AUDIO_URL}/{filename}")
+
+def get_audio_url(audio_type, filename):
+    """
+    Get audio URL - returns local URL if files exist locally, otherwise Azure Blob URL.
+    audio_type: 'phrasebook' or 'dictionary'
+    """
+    if USE_LOCAL_AUDIO:
+        # Use local serving route
+        if audio_type == 'phrasebook':
+            return f'/audio/nufi_phrasebook_audio/{filename}'
+        else:
+            return f'/audio/word_dictionary/{filename}'
+    else:
+        # Use Azure Blob Storage URLs directly
+        if audio_type == 'phrasebook':
+            return f'{PHRASEBOOK_AUDIO_URL}/{filename}'
+        else:
+            return f'{DICTIONARY_AUDIO_URL}/{filename}'
 
 # === TRIPLE WHISPER SETUP - Load THREE Whisper models for comparison ===
 print("Loading THREE Whisper models for comparison...")
@@ -109,7 +142,7 @@ def parse_nufi_words_with_audio(nufi_text):
             
             result.append({
                 'word': word_clean,
-                'audio_url': f'/audio/word_dictionary/{audio_file}' if audio_file else None
+                'audio_url': get_audio_url('dictionary', audio_file) if audio_file else None
             })
     
     return result
@@ -142,7 +175,7 @@ def find_closest_match(text):
         result['match_type'] = 'exact'
         # Add audio URLs
         row_id = result.get('row_id')
-        result['sentence_audio_url'] = f'/audio/nufi_phrasebook_audio/nufi_phrasebook_{row_id}.mp3' if row_id else None
+        result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
         result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
         print(f"Exact match: '{result['French']}' (score: 100)")
         return result
@@ -179,7 +212,7 @@ def find_closest_match(text):
                     result['match_type'] = 'multi-word'
                     # Add audio URLs
                     row_id = result.get('row_id')
-                    result['sentence_audio_url'] = f'/audio/nufi_phrasebook_audio/nufi_phrasebook_{row_id}.mp3' if row_id else None
+                    result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
                     result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
                     print(f"Multi-word match on {word_combo}: '{result['French']}' (score: {result['match_score']})")
                     return result
@@ -201,7 +234,7 @@ def find_closest_match(text):
                 result['match_type'] = 'single-word'
                 # Add audio URLs
                 row_id = result.get('row_id')
-                result['sentence_audio_url'] = f'/audio/nufi_phrasebook_audio/nufi_phrasebook_{row_id}.mp3' if row_id else None
+                result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
                 result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
                 print(f"Single-word match on '{word}': '{result['French']}' (score: 85)")
                 return result
@@ -218,7 +251,7 @@ def find_closest_match(text):
         result['match_type'] = 'contains'
         # Add audio URLs
         row_id = result.get('row_id')
-        result['sentence_audio_url'] = f'/audio/nufi_phrasebook_audio/nufi_phrasebook_{row_id}.mp3' if row_id else None
+        result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
         result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
         print(f"Contains match: '{result['French']}' (score: 90)")
         return result
@@ -241,7 +274,7 @@ def find_closest_match(text):
             result['match_type'] = 'token'
             # Add audio URLs
             row_id = result.get('row_id')
-            result['sentence_audio_url'] = f'/audio/nufi_phrasebook_audio/nufi_phrasebook_{row_id}.mp3' if row_id else None
+            result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
             result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
             print(f"Token match: '{result['French']}' (score: 80)")
             return result
@@ -266,7 +299,7 @@ def find_closest_match(text):
         result['match_type'] = 'semantic'
         # Add audio URLs
         row_id = result.get('row_id')
-        result['sentence_audio_url'] = f'/audio/nufi_phrasebook_audio/nufi_phrasebook_{row_id}.mp3' if row_id else None
+        result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
         result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
         return result
     
