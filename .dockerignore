@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Tests
+tests/
+
+# Temp files
+*.bak
+*.swp
+*.swo
+
+# Uploads (will be created at runtime)
+uploads/
+
+# Large model files (will be downloaded at runtime)
+*.pt
