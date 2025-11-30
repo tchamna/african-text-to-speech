@@ -28,15 +28,14 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY app.py .
 COPY startup.txt .
 
-# Copy templates and static folders
+# Copy templates folder
 COPY templates/ templates/
-COPY static/ static/
 
 # Copy assets (CSV, FAISS index, etc.)
 COPY assets/ assets/
 
-# Create directories for uploads and audio
-RUN mkdir -p uploads audio
+# Create directories for uploads, audio, and static
+RUN mkdir -p uploads audio static
 
 # Expose port 8000
 EXPOSE 8000
