@@ -6,3 +6,4 @@ faiss-cpu
 numpy
 gunicorn
 azure-storage-blob
+soundfile
