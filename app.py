@@ -11,6 +11,8 @@ import torch
 import soundfile as sf
 
 app = Flask(__name__)
+APP_MODE = os.environ.get('APP_MODE', 'development')
+print(f"APP_MODE set to: {APP_MODE}")
 
 # Azure Blob Storage base URLs for audio files (fallback when local files don't exist)
 AZURE_BLOB_BASE_URL = "https://africanobjectaudio.blob.core.windows.net"
@@ -60,6 +62,19 @@ WHISPER_MODEL_SIZE = os.environ.get('WHISPER_MODEL_SIZE', 'large-v3')
 print(f"Loading Whisper model: {WHISPER_MODEL_SIZE}...")
 whisper_model = whisper.load_model(WHISPER_MODEL_SIZE)
 print(f"   ✓ Whisper {WHISPER_MODEL_SIZE} loaded successfully!")
+
+# In development, optionally load additional Whisper models for side-by-side comparison
+whisper_models = {
+    'large': whisper_model  # map "large" panel to the configured main model (default large-v3)
+}
+if APP_MODE != 'production':
+    try:
+        print("Loading additional Whisper models for comparison (development mode): small, medium ...")
+        whisper_models['small'] = whisper.load_model('small')
+        whisper_models['medium'] = whisper.load_model('medium')
+        print("   ✓ Small and Medium models loaded for comparison")
+    except Exception as e:
+        print(f"Warning: Failed loading additional models for comparison: {e}")
 
 # Load semantic search model and index
 print("Loading semantic search model...")
@@ -296,9 +311,41 @@ def find_closest_match(text):
     
     return None
 
+def find_top_semantic_matches(text, top_k=5):
+    """
+    Return top K semantic matches for a query text
+    Used in production mode to show multiple relevant matches
+    """
+    if df.empty:
+        return []
+    
+    # Generate embedding for the query
+    query_embedding = embedding_model.encode([text], convert_to_numpy=True).astype('float32')
+    faiss.normalize_L2(query_embedding)
+    
+    # Search for top K matches
+    distances, indices = faiss_index.search(query_embedding, top_k)
+    
+    results = []
+    for i in range(top_k):
+        idx = indices[0][i]
+        score = float(distances[0][i])
+        score_percentage = score * 100
+        
+        result = df.iloc[idx].to_dict()
+        result['match_score'] = score_percentage
+        result['match_type'] = 'semantic'
+        # Add audio URLs
+        row_id = result.get('row_id')
+        result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
+        result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
+        results.append(result)
+    
+    return results
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', app_mode=APP_MODE)
 
 @app.route('/process_audio', methods=['POST'])
 def process_audio():
@@ -340,39 +387,94 @@ def process_audio():
         }), 400
     
     try:
-        # Transcribe with Whisper model
         lang_text = f"language: {language}" if language else "auto-detect"
+
+        # Development: run three models for comparison
+        if APP_MODE != 'production' and all(k in whisper_models for k in ['small', 'medium', 'large']):
+            print(f"Transcribing with three Whisper models (dev): small, medium, {WHISPER_MODEL_SIZE} ...")
+            model_outputs = {}
+            detected_lang_large = 'unknown'
+
+            # Order matters for logging; small -> medium -> large
+            for key in ['small', 'medium', 'large']:
+                mdl = whisper_models[key]
+                print(f" - {key}: transcribing ({lang_text})")
+                res = mdl.transcribe(temp_input, language=language, fp16=False, verbose=False)
+                txt = res.get('text', '').strip()
+                model_outputs[key] = {
+                    'text': txt,
+                    'detected_language': res.get('language', 'unknown')
+                }
+                if key == 'large':
+                    detected_lang_large = model_outputs[key]['detected_language']
+
+            # Validate at least large has output
+            if not model_outputs['large']['text']:
+                return jsonify({
+                    'error': 'No speech detected in audio. Please speak clearly and try again.',
+                    'transcription': '',
+                    'match': None
+                }), 400
+
+            # Compute matches for each transcription
+            matches = {}
+            for key in ['small', 'medium', 'large']:
+                txt = model_outputs[key]['text']
+                matches[key] = find_closest_match(txt) if txt else None
+
+            response = {
+                'transcription': model_outputs['large']['text'],
+                'detected_language': detected_lang_large,
+                'model_used': WHISPER_MODEL_SIZE,
+                'match': matches['large'],
+                'transcription_small': model_outputs['small']['text'],
+                'transcription_medium': model_outputs['medium']['text'],
+                'transcription_large': model_outputs['large']['text'],
+                'match_small': matches['small'],
+                'match_medium': matches['medium'],
+                'match_large': matches['large']
+            }
+            return jsonify(response)
+
+        # Production: single model path
         print(f"Transcribing audio with Whisper {WHISPER_MODEL_SIZE} (format: {file_ext}, {lang_text})...")
-        
         result = whisper_model.transcribe(temp_input, language=language, fp16=False, verbose=False)
-        transcription = result["text"].strip()
+        transcription = result.get("text", "").strip()
         detected_lang = result.get("language", "unknown")
         print(f"   Transcription: '{transcription}' (detected: {detected_lang})")
         print(f"   Full result keys: {list(result.keys())}")
         if "segments" in result:
             print(f"   Segments: {len(result['segments'])}")
-            for i, seg in enumerate(result["segments"][:3]):  # First 3 segments
+            for i, seg in enumerate(result["segments"][:3]):
                 print(f"     Segment {i}: '{seg['text']}' (start: {seg['start']:.2f}, end: {seg['end']:.2f})")
-        
-        # Check if transcription is empty
+
         if not transcription:
             return jsonify({
                 'error': 'No speech detected in audio. Please speak clearly and try again.',
                 'transcription': '',
                 'match': None
             }), 400
-        
-        # Find match for the transcription
-        match = find_closest_match(transcription) if transcription else None
-        
+
+        top_matches = find_top_semantic_matches(transcription, 5) if transcription else []
+        # Use the best semantic match for main display in production
+        best_semantic_match = top_matches[0] if top_matches else None
+
         response = {
             'transcription': transcription,
             'detected_language': detected_lang,
             'model_used': WHISPER_MODEL_SIZE,
-            'match': match
+            'match': best_semantic_match,  # Show semantic match in main panel
+            'top_matches': top_matches,
+            # For frontend compatibility: duplicate in production
+            'transcription_small': transcription,
+            'transcription_medium': transcription,
+            'transcription_large': transcription,
+            'match_small': best_semantic_match,
+            'match_medium': best_semantic_match,
+            'match_large': best_semantic_match
         }
         return jsonify(response)
-        
+
     except Exception as e:
         return jsonify({'error': f'Processing error: {str(e)}'}), 500
     finally:

@@ -19,9 +19,9 @@ with open('assets/index_mapping.pkl', 'rb') as f:
 def find_closest_match(text):
     if df.empty:
         return None
-    
+
     query_lower = text.lower().strip()
-    
+
     # Step 1: Exact match
     exact_matches = df[df['French'].str.lower().str.strip() == query_lower]
     if not exact_matches.empty:
@@ -30,11 +30,11 @@ def find_closest_match(text):
         result['match_type'] = 'exact'
         print(f"Exact match: '{result['French']}' (score: 100)")
         return result
-    
+
     # Step 2: Multi-word phrase match
     query_words_raw = query_lower.split()
     query_words = [w for w in query_words_raw if len(w) >= 2]
-    
+
     if len(query_words) >= 2:
         for i in range(len(query_words), 1, -1):
             for j in range(len(query_words) - i + 1):
@@ -42,20 +42,20 @@ def find_closest_match(text):
                 multi_matches = df.copy()
                 for word in word_combo:
                     multi_matches = multi_matches[multi_matches['French'].str.lower().str.contains(word, na=False, regex=False)]
-                
+
                 if not multi_matches.empty:
                     multi_matches = multi_matches.copy()
                     first_word = word_combo[0]
                     multi_matches['starts_with_query'] = multi_matches['French'].str.lower().str.startswith(first_word)
                     multi_matches['length'] = multi_matches['French'].str.len()
                     multi_matches = multi_matches.sort_values(['starts_with_query', 'length'], ascending=[False, True])
-                    
+
                     result = multi_matches.iloc[0].to_dict()
                     result['match_score'] = 95 - (5 * (len(query_words) - i))
                     result['match_type'] = 'multi-word'
                     print(f"Multi-word match on {word_combo}: '{result['French']}' (score: {result['match_score']})")
                     return result
-    
+
     # Step 3: Single-word partial match
     if query_words:
         significant_words = [w for w in query_words if len(w) >= 3]
@@ -69,44 +69,17 @@ def find_closest_match(text):
                 result = word_matches.iloc[0].to_dict()
                 result['match_score'] = 85
                 result['match_type'] = 'single-word'
-                print(f"Single-word match on '{word}': '{result['French']}' (score: 85)")
+                print(f"Single-word match on '{word}': '{result['French']}' (score: {result['match_score']})")
                 return result
-    
+
     return None
 
-# Test cases
-print("=" * 60)
-print("Testing: 'Je m'appelle Zona'")
-print("=" * 60)
-result = find_closest_match("Je m'appelle Zona")
+print('Testing: "Je vais bien"')
+result = find_closest_match('Je vais bien')
 if result:
     print(f"\nMatched French: {result['French']}")
     print(f"Nufi Translation: {result['Nufi']}")
     print(f"Score: {result['match_score']}")
     print(f"Type: {result['match_type']}")
 else:
-    print("No match found")
-
-print("\n" + "=" * 60)
-print("Testing: 'appelle-moi'")
-print("=" * 60)
-result = find_closest_match("appelle-moi")
-if result:
-    print(f"\nMatched French: {result['French']}")
-    print(f"Nufi Translation: {result['Nufi']}")
-    print(f"Score: {result['match_score']}")
-    print(f"Type: {result['match_type']}")
-else:
-    print("No match found")
-
-print("\n" + "=" * 60)
-print("Testing: 'bonjour'")
-print("=" * 60)
-result = find_closest_match("bonjour")
-if result:
-    print(f"\nMatched French: {result['French']}")
-    print(f"Nufi Translation: {result['Nufi']}")
-    print(f"Score: {result['match_score']}")
-    print(f"Type: {result['match_type']}")
-else:
-    print("No match found")
+    print('No match found')

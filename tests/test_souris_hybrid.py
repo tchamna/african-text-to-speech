@@ -96,3 +96,33 @@ for word in words:
     print(f"\n'{word}' appears in {len(matches)} phrases:")
     for _, row in matches.head(3).iterrows():
         print(f"  - {row['French']}")
+
+# Test with "je vais bien"
+print("\n" + "="*70)
+print("Testing: 'je vais bien'")
+print("="*70)
+
+result = find_closest_match("je vais bien")
+
+if result:
+    print(f"\n✓ Match found!")
+    print(f"  Type: {result['match_type'].upper()}")
+    if 'matched_word' in result:
+        print(f"  Matched on word: '{result['matched_word']}'")
+    print(f"  French: {result['French']}")
+    print(f"  Nufi: {result['Nufi']}")
+    print(f"  Score: {result['match_score']:.1f}")
+else:
+    print("\n✗ No match found")
+
+# Show what would match for each word in "je vais bien"
+print("\n" + "="*70)
+print("Individual word analysis for 'je vais bien':")
+print("="*70)
+
+words_bien = ["je", "vais", "bien"]
+for word in words_bien:
+    matches = df[df['French'].str.lower().str.contains(word, na=False)]
+    print(f"\n'{word}' appears in {len(matches)} phrases:")
+    for _, row in matches.head(3).iterrows():
+        print(f"  - {row['French']}")

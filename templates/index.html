@@ -94,6 +94,7 @@
         <div style="background-color: #fff3cd; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 14px;">
             <strong>📝 Tips:</strong> Click record, wait 1 second, then speak clearly for 2-3 seconds. Allow microphone access when prompted.
         </div>
+        <!-- Debug: App Mode: {{ app_mode }} -->
         
         <div class="controls">
             <div style="margin-bottom: 15px;">
@@ -121,10 +122,11 @@
         <div id="status" class="status">Ready</div>
 
         <div id="result" class="result-box">
+            {% if app_mode != 'production' %}
             <h3>🎯 Three-Way Model Comparison:</h3>
             
             <!-- Whisper Small Result -->
-            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #ffc107;">
+            <div id="smallResult" style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #ffc107;">
                 <h4 style="margin: 0 0 10px 0; color: #856404;">🟡 Whisper Small (~466MB - Fast)</h4>
                 <p style="margin: 5px 0;"><strong>Transcription:</strong> <span id="smallText" class="transcription"></span></p>
                 <p style="margin: 5px 0;"><strong>Matched French:</strong> <span id="smallMatch" style="font-weight: bold; color: #2c3e50;"></span></p>
@@ -132,12 +134,17 @@
             </div>
             
             <!-- Whisper Medium Result -->
-            <div style="background: #e8f4f8; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #3498db;">
+            <div id="mediumResult" style="background: #e8f4f8; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #3498db;">
                 <h4 style="margin: 0 0 10px 0; color: #2980b9;">🔵 Whisper Medium (~1.5GB - Balanced)</h4>
                 <p style="margin: 5px 0;"><strong>Transcription:</strong> <span id="mediumText" class="transcription"></span></p>
                 <p style="margin: 5px 0;"><strong>Matched French:</strong> <span id="mediumMatch" style="font-weight: bold; color: #2c3e50;"></span></p>
                 <p style="margin: 5px 0;"><strong>Nufi Translation:</strong> <span id="mediumTranslation" class="translation"></span></p>
             </div>
+            {% endif %}
+            
+            {% if app_mode == 'production' %}
+            <h3>🎯 Whisper Large-v3 Result</h3>
+            {% endif %}
             
             <!-- Whisper Large-v3 Result -->
             <div style="background: #e8f4e8; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #27ae60;">
@@ -147,11 +154,21 @@
                 <p style="margin: 5px 0;"><strong>Nufi Translation:</strong> <span id="largeTranslation" class="translation"></span></p>
             </div>
             
+            {% if app_mode == 'production' %}
+            <!-- Top 5 Semantic Matches (Production Mode) -->
+            <div id="topMatchesSection" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #6c757d;">
+                <h4 style="margin: 0 0 10px 0; color: #495057;">🎯 Top 5 Semantic Matches</h4>
+                <div id="topMatchesContainer"></div>
+            </div>
+            {% endif %}
+            
+            {% if app_mode != 'production' %}
             <!-- Comparison -->
             <div id="comparisonResult" style="background: #d1ecf1; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #17a2b8;">
                 <h4 style="margin: 0 0 10px 0; color: #0c5460;">⚖️ Comparison</h4>
                 <p id="comparisonText" style="margin: 5px 0;"></p>
             </div>
+            {% endif %}
             
             <audio id="audioPlayer" controls style="width: 100%; margin-top: 10px; display: none;"></audio>
             
@@ -404,44 +421,46 @@
         function displayResult(data) {
             resultDiv.style.display = 'block';
             
-            // Whisper Small results
+            // Whisper Small results (present only in development UI)
             const smallText = document.getElementById('smallText');
             const smallMatch = document.getElementById('smallMatch');
             const smallTranslation = document.getElementById('smallTranslation');
-            
-            smallText.textContent = data.transcription_small || 'N/A';
-            if (data.match_small) {
-                smallMatch.textContent = data.match_small.French || 'N/A';
-                renderNufiWithAudio(data.match_small, smallTranslation);
-                // Auto-play sentence audio for exact or multi-word match (score >= 95)
-                if ((data.match_small.match_score >= 95 && data.match_small.sentence_audio_url &&
-                     (data.match_small.match_type === 'exact' || data.match_small.match_type === 'multi-word')) ) {
-                    setTimeout(() => playSentenceAudio(data.match_small.sentence_audio_url), 300);
+            if (smallText && smallMatch && smallTranslation) {
+                smallText.textContent = data.transcription_small || 'N/A';
+                if (data.match_small) {
+                    smallMatch.textContent = data.match_small.French || 'N/A';
+                    renderNufiWithAudio(data.match_small, smallTranslation);
+                    // Auto-play sentence audio for exact or multi-word match (score >= 95)
+                    if ((data.match_small.match_score >= 95 && data.match_small.sentence_audio_url &&
+                         (data.match_small.match_type === 'exact' || data.match_small.match_type === 'multi-word')) ) {
+                        setTimeout(() => playSentenceAudio(data.match_small.sentence_audio_url), 300);
+                    }
+                } else {
+                    smallMatch.textContent = 'No match';
+                    smallTranslation.textContent = 'N/A';
                 }
-            } else {
-                smallMatch.textContent = 'No match';
-                smallTranslation.textContent = 'N/A';
             }
             
-            // Whisper Medium results
+            // Whisper Medium results (present only in development UI)
             const mediumText = document.getElementById('mediumText');
             const mediumMatch = document.getElementById('mediumMatch');
             const mediumTranslation = document.getElementById('mediumTranslation');
-            
-            mediumText.textContent = data.transcription_medium || 'N/A';
-            if (data.match_medium) {
-                mediumMatch.textContent = data.match_medium.French || 'N/A';
-                renderNufiWithAudio(data.match_medium, mediumTranslation);
-                // Auto-play sentence audio for exact or multi-word match (only if Small didn't already play)
-                if ((data.match_medium.match_score >= 95 && data.match_medium.sentence_audio_url &&
-                     (data.match_medium.match_type === 'exact' || data.match_medium.match_type === 'multi-word')) &&
-                    (!data.match_small || data.match_small.match_score < 95 ||
-                     (data.match_small.match_type !== 'exact' && data.match_small.match_type !== 'multi-word')) ) {
-                    setTimeout(() => playSentenceAudio(data.match_medium.sentence_audio_url), 300);
+            if (mediumText && mediumMatch && mediumTranslation) {
+                mediumText.textContent = data.transcription_medium || 'N/A';
+                if (data.match_medium) {
+                    mediumMatch.textContent = data.match_medium.French || 'N/A';
+                    renderNufiWithAudio(data.match_medium, mediumTranslation);
+                    // Auto-play sentence audio for exact or multi-word match (only if Small didn't already play)
+                    if ((data.match_medium.match_score >= 95 && data.match_medium.sentence_audio_url &&
+                         (data.match_medium.match_type === 'exact' || data.match_medium.match_type === 'multi-word')) &&
+                        (!data.match_small || data.match_small.match_score < 95 ||
+                         (data.match_small.match_type !== 'exact' && data.match_small.match_type !== 'multi-word')) ) {
+                        setTimeout(() => playSentenceAudio(data.match_medium.sentence_audio_url), 300);
+                    }
+                } else {
+                    mediumMatch.textContent = 'No match';
+                    mediumTranslation.textContent = 'N/A';
                 }
-            } else {
-                mediumMatch.textContent = 'No match';
-                mediumTranslation.textContent = 'N/A';
             }
             
             // Whisper Large-v3 results
@@ -450,43 +469,97 @@
             const largeTranslation = document.getElementById('largeTranslation');
             
             largeText.textContent = data.transcription_large || 'N/A';
-            if (data.match_large) {
-                largeMatch.textContent = data.match_large.French || 'N/A';
-                renderNufiWithAudio(data.match_large, largeTranslation);
-                // Auto-play sentence audio for exact or multi-word match (only if Small and Medium didn't already play)
-                if ((data.match_large.match_score >= 95 && data.match_large.sentence_audio_url &&
-                     (data.match_large.match_type === 'exact' || data.match_large.match_type === 'multi-word')) &&
-                    (!data.match_small || data.match_small.match_score < 95 ||
-                     (data.match_small.match_type !== 'exact' && data.match_small.match_type !== 'multi-word')) &&
+            
+            // In production mode, show the best semantic match; in development mode, show the hybrid match
+            const isProduction = !data.transcription_small && !data.transcription_medium; // Simple check for production mode
+            const bestMatch = isProduction && data.top_matches && data.top_matches.length > 0 ? data.top_matches[0] : data.match_large;
+            
+            if (bestMatch) {
+                largeMatch.textContent = bestMatch.French || 'N/A';
+                renderNufiWithAudio(bestMatch, largeTranslation);
+                // Auto-play sentence audio for exact, multi-word, or semantic match with score >= 95
+                if ((bestMatch.match_score >= 95 && bestMatch.sentence_audio_url &&
+                     (bestMatch.match_type === 'exact' || bestMatch.match_type === 'multi-word' || bestMatch.match_type === 'semantic')) &&
                     (!data.match_medium || data.match_medium.match_score < 95 ||
-                     (data.match_medium.match_type !== 'exact' && data.match_medium.match_type !== 'multi-word')) ) {
-                    setTimeout(() => playSentenceAudio(data.match_large.sentence_audio_url), 300);
+                     (data.match_medium.match_type !== 'exact' && data.match_medium.match_type !== 'multi-word' && data.match_medium.match_type !== 'semantic')) &&
+                    (!data.match_small || data.match_small.match_score < 95 ||
+                     (data.match_small.match_type !== 'exact' && data.match_small.match_type !== 'multi-word' && data.match_small.match_type !== 'semantic')) ) {
+                    setTimeout(() => playSentenceAudio(bestMatch.sentence_audio_url), 1000); // Increased delay to 1 second
                 }
             } else {
                 largeMatch.textContent = 'No match';
                 largeTranslation.textContent = 'N/A';
             }
             
-            // Comparison
+            // Display top 5 semantic matches in production mode
+            const topMatchesSection = document.getElementById('topMatchesSection');
+            const topMatchesContainer = document.getElementById('topMatchesContainer');
+            if (topMatchesSection && topMatchesContainer && data.top_matches) {
+                topMatchesContainer.innerHTML = ''; // Clear previous results
+                
+                if (data.top_matches.length > 0) {
+                    data.top_matches.forEach((match, index) => {
+                        const matchDiv = document.createElement('div');
+                        matchDiv.style.cssText = 'background: white; padding: 10px; margin: 5px 0; border-radius: 5px; border: 1px solid #dee2e6;';
+                        
+                        const rank = index + 1;
+                        const score = match.match_score ? match.match_score.toFixed(1) : 'N/A';
+                        
+                        matchDiv.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                <strong style="color: #495057;">#${rank} Match (${score}% similarity)</strong>
+                                <span style="font-size: 0.8em; color: #6c757d;">${match.match_type || 'semantic'}</span>
+                            </div>
+                            <div style="margin: 5px 0;"><strong>French:</strong> ${match.French || 'N/A'}</div>
+                            <div style="margin: 5px 0;"><strong>Nufi:</strong> <span class="translation-${index}"></span></div>
+                        `;
+                        
+                        topMatchesContainer.appendChild(matchDiv);
+                        
+                        // Render Nufi with audio for this match
+                        const translationElement = matchDiv.querySelector(`.translation-${index}`);
+                        if (translationElement) {
+                            renderNufiWithAudio(match, translationElement);
+                        }
+                    });
+                    
+                    topMatchesSection.style.display = 'block';
+                } else {
+                    topMatchesSection.style.display = 'none';
+                }
+            }
+            
+            // Comparison section (development UI only)
             const comparisonText = document.getElementById('comparisonText');
             const small = data.transcription_small || '';
             const medium = data.transcription_medium || '';
             const large = data.transcription_large || '';
-            
-            if (small.toLowerCase() === medium.toLowerCase() && medium.toLowerCase() === large.toLowerCase()) {
-                comparisonText.innerHTML = '✅ <strong>All three models agree!</strong><br>Transcription: "' + large + '"';
-                comparisonText.style.color = '#155724';
-            } else if (medium.toLowerCase() === large.toLowerCase()) {
-                comparisonText.innerHTML = '⚠️ <strong>Medium and Large-v3 agree</strong> (Small differs)<br>' +
-                    'Small: "' + small + '"<br>' +
-                    'Medium & Large: "' + medium + '"';
-                comparisonText.style.color = '#0c5460';
-            } else {
-                comparisonText.innerHTML = '⚠️ <strong>Different results</strong><br>' +
-                    'Small: "' + small + '"<br>' +
-                    'Medium: "' + medium + '"<br>' +
-                    'Large-v3: "' + large + '"';
-                comparisonText.style.color = '#856404';
+            if (comparisonText) {
+                if (small.toLowerCase() === medium.toLowerCase() && medium.toLowerCase() === large.toLowerCase()) {
+                    comparisonText.innerHTML = '✅ <strong>All three models agree!</strong><br>Transcription: "' + small + '"';
+                    comparisonText.style.color = '#155724';
+                } else if (small.toLowerCase() === medium.toLowerCase()) {
+                    comparisonText.innerHTML = '⚠️ <strong>Small and Medium agree</strong> (Large-v3 differs)<br>' +
+                        'Small & Medium: "' + small + '"<br>' +
+                        'Large-v3: "' + large + '"';
+                    comparisonText.style.color = '#0c5460';
+                } else if (small.toLowerCase() === large.toLowerCase()) {
+                    comparisonText.innerHTML = '⚠️ <strong>Small and Large-v3 agree</strong> (Medium differs)<br>' +
+                        'Small & Large: "' + small + '"<br>' +
+                        'Medium: "' + medium + '"';
+                    comparisonText.style.color = '#0c5460';
+                } else if (medium.toLowerCase() === large.toLowerCase()) {
+                    comparisonText.innerHTML = '⚠️ <strong>Medium and Large-v3 agree</strong> (Small differs)<br>' +
+                        'Small: "' + small + '"<br>' +
+                        'Medium & Large: "' + medium + '"';
+                    comparisonText.style.color = '#0c5460';
+                } else {
+                    comparisonText.innerHTML = '⚠️ <strong>Different results</strong><br>' +
+                        'Small: "' + small + '"<br>' +
+                        'Medium: "' + medium + '"<br>' +
+                        'Large-v3: "' + large + '"';
+                    comparisonText.style.color = '#856404';
+                }
             }
             
             // Auto-play sentence audio if any two models agree on the French match AND both have exact match (score 100)
@@ -515,7 +588,9 @@
             }
             
             // Show/hide no match message
-            if (!data.match_small && !data.match_medium && !data.match_large) {
+            const hasAnyMatch = data.match_small || data.match_medium || data.match_large || 
+                               (data.top_matches && data.top_matches.length > 0);
+            if (!hasAnyMatch) {
                 document.getElementById('noMatch').style.display = 'block';
             } else {
                 document.getElementById('noMatch').style.display = 'none';
