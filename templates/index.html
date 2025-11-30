@@ -471,20 +471,39 @@
             largeText.textContent = data.transcription_large || 'N/A';
             
             // In production mode, show the best semantic match; in development mode, show the hybrid match
-            const isProduction = !data.transcription_small && !data.transcription_medium; // Simple check for production mode
+            // We detect production mode by the presence of top_matches which is only sent in production
+            const isProduction = data.top_matches !== undefined;
             const bestMatch = isProduction && data.top_matches && data.top_matches.length > 0 ? data.top_matches[0] : data.match_large;
             
             if (bestMatch) {
                 largeMatch.textContent = bestMatch.French || 'N/A';
                 renderNufiWithAudio(bestMatch, largeTranslation);
-                // Auto-play sentence audio for exact, multi-word, or semantic match with score >= 95
-                if ((bestMatch.match_score >= 95 && bestMatch.sentence_audio_url &&
-                     (bestMatch.match_type === 'exact' || bestMatch.match_type === 'multi-word' || bestMatch.match_type === 'semantic')) &&
-                    (!data.match_medium || data.match_medium.match_score < 95 ||
-                     (data.match_medium.match_type !== 'exact' && data.match_medium.match_type !== 'multi-word' && data.match_medium.match_type !== 'semantic')) &&
-                    (!data.match_small || data.match_small.match_score < 95 ||
-                     (data.match_small.match_type !== 'exact' && data.match_small.match_type !== 'multi-word' && data.match_small.match_type !== 'semantic')) ) {
-                    setTimeout(() => playSentenceAudio(bestMatch.sentence_audio_url), 1000); // Increased delay to 1 second
+                
+                // Auto-play logic
+                // In production: play if best match is good (ignore small/medium as they are duplicates)
+                // In development: play only if small/medium didn't already play
+                const isGoodMatch = bestMatch.match_score >= 95 && bestMatch.sentence_audio_url &&
+                                   (bestMatch.match_type === 'exact' || bestMatch.match_type === 'multi-word' || bestMatch.match_type === 'semantic');
+                
+                let shouldPlay = false;
+                if (isGoodMatch) {
+                    if (isProduction) {
+                        shouldPlay = true;
+                    } else {
+                        // Development mode checks
+                        const mediumPlayed = data.match_medium && data.match_medium.match_score >= 95 && 
+                                            (data.match_medium.match_type === 'exact' || data.match_medium.match_type === 'multi-word' || data.match_medium.match_type === 'semantic');
+                        const smallPlayed = data.match_small && data.match_small.match_score >= 95 && 
+                                           (data.match_small.match_type === 'exact' || data.match_small.match_type === 'multi-word' || data.match_small.match_type === 'semantic');
+                        
+                        if (!mediumPlayed && !smallPlayed) {
+                            shouldPlay = true;
+                        }
+                    }
+                }
+
+                if (shouldPlay) {
+                    setTimeout(() => playSentenceAudio(bestMatch.sentence_audio_url), 300);
                 }
             } else {
                 largeMatch.textContent = 'No match';
