@@ -9,7 +9,7 @@ on:
 
 env:
   AZURE_WEBAPP_NAME: african-text-to-speech
-  ACR_NAME: africanspeaksacr          # Change to your Azure Container Registry name
+  ACR_NAME: africanrecognition          # Change to your Azure Container Registry name
   IMAGE_NAME: african-text-to-speech-app
   PYTHON_VERSION: '3.11'
 
