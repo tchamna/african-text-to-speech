@@ -6,6 +6,8 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 import faiss
 import pickle
+import logging
+from datetime import datetime
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 import torch
 import soundfile as sf
@@ -86,6 +88,20 @@ faiss_index = faiss.read_index('assets/faiss_index.bin')
 with open('assets/index_mapping.pkl', 'rb') as f:
     index_data = pickle.load(f)
 print(f"FAISS index loaded: {faiss_index.ntotal} entries")
+
+# --- Logging for rejected semantic candidates ---
+LOG_DIR = 'logs'
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
+rejected_log_path = os.path.join(LOG_DIR, 'rejected_semantic.log')
+logger = logging.getLogger('african_voice')
+logger.setLevel(logging.INFO)
+fh = logging.FileHandler(rejected_log_path)
+fh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+if not logger.handlers:
+    logger.addHandler(fh)
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
@@ -219,6 +235,16 @@ def find_closest_match(text):
             best_match['word_audio'] = parse_nufi_words_with_audio(best_match.get('Nufi', ''))
             print(f"New best match ({match_type}): '{best_match['French']}' (score: {score})")
 
+    # Prepare content-token helper and compute query content tokens
+    import re as _re
+    def _content_tokens_local(s):
+        toks = _re.findall(r"[\w'’̄́̀̂̌]+", str(s).lower())
+        stop = set(['je','tu','il','elle','nous','vous','ils','elles','le','la','les','de','des','un','une',
+                    'et','à','a','au','aux','dans','pour','par','avec','sans','sur','sous','en','est','suis','es','êtes','sommes','être','avoir'])
+        return [t for t in toks if t and t not in stop and len(t) > 1]
+
+    q_content = set(_content_tokens_local(query_normalized))
+
     # Step 2: Multi-word phrase match - prioritize matches with multiple query words
     # Keep contractions together (e.g., "m'appelle" stays as one word)
     # Also keep short important words like "je", "tu", "il"
@@ -231,11 +257,15 @@ def find_closest_match(text):
             # Try different word combinations
             for j in range(len(query_words) - i + 1):
                 word_combo = query_words[j:j+i]
+                # Skip combos that don't include any content tokens to avoid matching only function words
+                if q_content and not any(w in q_content for w in word_combo):
+                    continue
+
                 # Check if phrase contains all these words
                 multi_matches = df.copy()
                 for word in word_combo:
                     multi_matches = multi_matches[multi_matches['French'].str.lower().str.contains(word, na=False, regex=False)]
-                
+
                 if not multi_matches.empty:
                     # Prioritize phrases that start with the same beginning
                     multi_matches = multi_matches.copy()
@@ -245,13 +275,13 @@ def find_closest_match(text):
                     multi_matches['length'] = multi_matches['French'].str.len()
                     # Sort: prioritize phrases starting with query, then prefer shorter (more general) phrases
                     multi_matches = multi_matches.sort_values(['starts_with_query', 'length'], ascending=[False, True])
-                    
+
                     candidate = multi_matches.iloc[0].to_dict()
                     # Penalize if we only matched a small part of the query
                     match_ratio = i / len(query_words)
                     base_score = 95 - (5 * (len(query_words) - i))
                     adjusted_score = base_score * match_ratio if match_ratio < 0.5 else base_score
-                    
+
                     update_best_match(candidate, adjusted_score, 'multi-word')
                     break # Found the longest combo, stop looking for shorter ones in this step
             if best_match and best_match['match_type'] == 'multi-word':
@@ -310,14 +340,44 @@ def find_closest_match(text):
     semantic_score = float(distances[0][0]) * 100
     
     print(f"Semantic match candidate: '{df.iloc[best_idx]['French']}' (score: {semantic_score:.1f})")
-    
-    # Only use semantic if score is reasonably high
-    if semantic_score > 65:  # 65% similarity threshold
-        candidate = df.iloc[best_idx].to_dict()
-        # If semantic score is significantly better than text match, take it
-        # Or if we have no text match
+
+    # Lexical/content safeguard to reduce false positives:
+    # - compute content tokens (remove common stopwords/auxiliary words)
+    # - require at least some overlap of content tokens OR a very high semantic score
+    import re as _re
+    def _content_tokens(s):
+        toks = _re.findall(r"[\w'’̄́̀̂̌]+", str(s).lower())
+        stop = set(['je','tu','il','elle','nous','vous','ils','elles','le','la','les','de','des','un','une',
+                    'et','à','a','au','aux','dans','pour','par','avec','sans','sur','sous','en','est','suis','es','êtes','sommes','être','avoir'])
+        return [t for t in toks if t and t not in stop and len(t) > 1]
+
+    candidate = df.iloc[best_idx].to_dict()
+    q_content = set(_content_tokens(text))
+    cand_content = set(_content_tokens(candidate.get('French','')))
+    content_overlap = 0.0
+    if q_content:
+        content_overlap = len(q_content & cand_content) / float(len(q_content))
+
+    # Debug print
+    print(f"  query_content={q_content}, candidate_content={cand_content}, content_overlap={content_overlap:.2f}")
+
+    # Acceptance rules:
+    # - If semantic_score >= 90: accept (very strong semantic match)
+    # - Else if semantic_score >= 70 AND content_overlap >= 0.25: accept
+    # - Otherwise reject semantic fallback to avoid misleading matches
+    if semantic_score >= 90 or (semantic_score >= 70 and content_overlap >= 0.25):
         if not best_match or semantic_score > best_score:
-             update_best_match(candidate, semantic_score, 'semantic')
+            update_best_match(candidate, semantic_score, 'semantic')
+    else:
+        # Log rejected semantic candidate for offline analysis
+        msg = (f"REJECTED SEMANTIC - query='{text}', candidate='{candidate.get('French','')}', "
+               f"score={semantic_score:.2f}, overlap={content_overlap:.2f}")
+        print(msg)
+        try:
+            logger.info(msg)
+        except Exception:
+            # Fallback to printing if logger misconfigured
+            print('Failed to write rejected semantic to log')
     
     return best_match
 
@@ -352,6 +412,25 @@ def find_top_semantic_matches(text, top_k=5):
         results.append(result)
     
     return results
+
+
+@app.route('/debug_match', methods=['GET', 'POST'])
+def debug_match():
+    """Debug endpoint: accept ?text=... (GET) or form/body param 'text' (POST)
+    Returns the best hybrid match and top semantic matches with debug info.
+    """
+    text = request.values.get('text', '')
+    if not text:
+        return jsonify({'error': 'Please provide a `text` parameter'}), 400
+
+    best = find_closest_match(text)
+    top = find_top_semantic_matches(text, 5)
+
+    return jsonify({
+        'query': text,
+        'best_match': best,
+        'top_matches': top
+    })
 
 @app.route('/')
 def index():

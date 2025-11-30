@@ -1,46 +1,124 @@
-git git stat# AfricanSpeaks
+# AfricanVoice: AI-Powered Multilingual Voice Translator
 
-Voice-to-Voice French ↔ Nufi Translator with Whisper Model Comparison
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
+![Flask](https://img.shields.io/badge/Flask-3.0-green)
+![OpenAI Whisper](https://img.shields.io/badge/AI-OpenAI%20Whisper-orange)
+![FAISS](https://img.shields.io/badge/Vector%20Search-FAISS-red)
+![SentenceTransformers](https://img.shields.io/badge/NLP-SentenceTransformers-yellow)
 
-## Features
-- Record or upload French audio, get Nufi translation
-- Three-way Whisper model comparison (Small, Medium, Large-v3)
-- Clickable Nufi words for pronunciation
-- Auto-play full sentence audio for exact matches
-- Multi-language support (French, English, Spanish, etc.)
+## 🚀 Project Overview
 
-## Quick Start
-1. Clone the repo:
-   ```sh
-   git clone <your-repo-url>
-   cd AfricanSpeaks
+**AfricanVoice** is a sophisticated AI-driven translation application designed to bridge the linguistic gap between **French, English, and Spanish** and **Nufi** (a Bamileke language from Cameroon). Unlike traditional dictionary lookups, this project leverages state-of-the-art **Machine Learning** and **Natural Language Processing (NLP)** techniques to understand spoken language and retrieve semantically similar translations, even when the phrasing differs from the database.
+
+This project serves as a demonstration of applying modern AI to low-resource language preservation and education.
+
+## 🧠 Key AI & Machine Learning Features
+
+### 1. Advanced Speech Recognition (ASR)
+- **Engine:** [OpenAI Whisper](https://github.com/openai/whisper) (Large-v3 model).
+- **Capability:** Transcribes spoken French, English, and Spanish with high accuracy, handling accents and background noise effectively.
+- **Multi-Model Architecture:** Includes a development mode to compare performance across Whisper `Small`, `Medium`, and `Large-v3` models in real-time.
+
+### 2. Semantic Search & Vector Embeddings
+- **Embeddings:** Uses `SentenceTransformers` (`paraphrase-multilingual-MiniLM-L12-v2`) to convert text (French, English, Spanish) into high-dimensional vector representations.
+- **Vector Database:** Implements **FAISS (Facebook AI Similarity Search)** for ultra-fast similarity retrieval.
+- **Benefit:** Allows the system to understand *meaning* rather than just keywords.
+    - *Input:* "Je me sens bien" (I feel good in French)
+    - *Match:* "Je suis à l'aise" (I am at ease) -> **90.5% Similarity**
+    - *Input:* "I feel good" (English)
+    - *Match:* "Je suis à l'aise" (I am at ease) -> **High Similarity**
+
+### 3. Hybrid Search Algorithm
+To ensure the highest relevance, the system employs a tiered search strategy:
+1.  **Exact Match:** Instant retrieval for identical phrases.
+2.  **Token/Multi-word Match:** Heuristic matching for partial phrases.
+3.  **Semantic Fallback:** Vector-based search for paraphrases and conceptual matches.
+
+### 4. Smart Audio Processing
+- **Silence Detection:** Real-time analysis of microphone input stream to detect speech onset and offset.
+- **Auto-Stop:** Automatically stops recording after 10 seconds of silence to streamline the user experience.
+
+## 🛠️ Tech Stack
+
+### Backend
+- **Framework:** Flask (Python)
+- **Data Processing:** Pandas, NumPy
+- **Audio Processing:** `soundfile`, `librosa`
+
+### AI & ML Libraries
+- `openai-whisper` (Speech-to-Text)
+- `sentence-transformers` (Embeddings)
+- `faiss-cpu` (Vector Indexing)
+- `torch` (PyTorch backend)
+
+### Frontend
+- **Core:** HTML5, CSS3, JavaScript (ES6+)
+- **Audio:** Web Audio API (Real-time visualization and silence detection)
+- **Templating:** Jinja2
+
+### Infrastructure & Data
+- **Storage:** Azure Blob Storage (for hosting audio assets)
+- **Containerization:** Docker & Docker Compose support
+- **Data Source:** Custom curated CSV dataset mapping French phrases to Nufi translations and audio IDs.
+
+## 📂 Project Structure
+
+```
+AfricanVoice/
+├── app.py                 # Main Flask application & Search Logic
+├── requirements.txt       # Python dependencies
+├── Dockerfile             # Container configuration
+├── assets/                # Data resources
+│   ├── Nufi_Francais...csv # Raw dataset
+│   ├── faiss_index.bin    # Pre-computed vector index
+│   └── index_mapping.pkl  # Index-to-Dataframe mapping
+├── templates/
+│   └── index.html         # Responsive Frontend UI
+├── tests/
+│   └── build_index.py     # Script to generate FAISS index
+└── audio/                 # Local audio cache (optional)
+```
+
+## ⚡ Quick Start
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/tchamna/african-text-to-speech.git
+   cd AfricanVoice
    ```
-2. Create a Python virtual environment:
-   ```sh
+
+2. **Create a virtual environment:**
+   ```bash
    python -m venv .venv
-   source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+   # Windows
+   .\.venv\Scripts\Activate
+   # Linux/Mac
+   source .venv/bin/activate
    ```
-3. Install dependencies:
-   ```sh
+
+3. **Install dependencies:**
+   ```bash
    pip install -r requirements.txt
    ```
-4. Run the app:
-   ```sh
-   python app.py
+
+4. **Build the Vector Index (First run only):**
+   ```bash
+   python tests/build_index.py
    ```
-5. Open [http://127.0.0.1:5001](http://127.0.0.1:5001) in your browser.
 
-## File Structure
-- `app.py` — Flask backend
-- `templates/index.html` — Frontend UI
-- `assets/` — Phrasebook, word audio mapping, FAISS index
-- `audio/word_dictionary/` — Individual word audio files
-- `audio/nufi_phrasebook_audio/` — Full sentence audio files
-- `requirements.txt` — Python dependencies
+5. **Run the application:**
+   ```bash
+   # Production mode (Semantic Search enabled)
+   $env:APP_MODE='production'; python app.py
+   ```
 
-## Notes
-- Large model files and audio assets are not tracked in git (see `.gitignore`).
-- For best results, use Chrome or Edge.
+6. **Access the UI:**
+   Open `http://127.0.0.1:5001` in your browser.
 
-## License
-MIT
+## 🔮 Future Improvements
+- Fine-tuning Whisper on African accented French.
+- Expanding the dataset to include more Bamileke dialects.
+- Implementing a feedback loop for users to correct translations.
+
+## 📄 License
+MIT License

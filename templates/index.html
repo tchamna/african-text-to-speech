@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AfricanSpeaks - Voice Translator</title>
+    <title>AfricanVoice - Voice Translator</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -84,21 +84,49 @@
             margin-top: 10px;
             color: #666;
         }
+        /* Scrolling Text Styles */
+        .scrolling-wrapper {
+            overflow: hidden;
+            white-space: nowrap;
+            background-color: #e8f4f8;
+            padding: 10px 0;
+            margin: 15px 0;
+            border-radius: 5px;
+            border-left: 5px solid #3498db;
+            display: flex;
+        }
+        .scrolling-text {
+            animation: scroll 40s linear infinite;
+            font-size: 16px;
+            color: #2c3e50;
+            font-weight: 500;
+            padding-right: 50px;
+        }
+        @keyframes scroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>AfricanSpeaks 🎙️</h1>
-        <p>Parlez en français pour obtenir la traduction en Nufi.</p>
-        <p style="font-size: 14px; color: #7f8c8d;">Speak in French to get the Nufi translation.</p>
+        <h1>AfricanVoice 🎙️ By Resulam</h1>
+        <p>Parlez en français, anglais ou espagnol pour obtenir la traduction en Nufi.</p>
+        <p style="font-size: 14px; color: #7f8c8d;">Speak in French, English, or Spanish to get the Nufi translation.</p>
         <div style="background-color: #fff3cd; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 14px;">
             <strong>📝 Tips:</strong> Click record, wait 1 second, then speak clearly for 2-3 seconds. Allow microphone access when prompted.
         </div>
+
+
+        <div class="scrolling-wrapper" id="scrollingWrapper">
+            <!-- Content populated by JavaScript -->
+        </div>
+        
         <!-- Debug: App Mode: {{ app_mode }} -->
         
         <div class="controls">
             <div style="margin-bottom: 15px;">
-                <label for="languageSelect" style="font-weight: bold; margin-right: 10px;">🌍 Speech Language:</label>
+                <label for="languageSelect" style="font-weight: bold; margin-right: 10px;">🌍 See the Transcription in:</label>
                 <select id="languageSelect" style="padding: 8px 15px; font-size: 14px; border-radius: 5px; border: 2px solid #3498db; cursor: pointer;">
                     <option value="auto">Auto-detect</option>
                     <option value="fr" selected>French (Français)</option>
@@ -179,6 +207,44 @@
     </div>
 
     <script>
+        // --- Configuration for Scrolling Text ---
+        const examplePhrases = [
+            "Salut", 
+            "Hello", 
+            "Buenos dias", 
+            "Je m'appelle...", 
+            "My name is ...", 
+            "Thank you",
+            "Gamsahamnida", 
+            "Merci", 
+            "Je suis heureux", 
+            "I am happy", 
+            "Je suis fatigué", 
+            "J'ai faim", 
+            "Tengo Hambre",
+            "Comment ça va ?", 
+            "L'assiette", 
+            "La chaise",
+        ];
+
+        function initScrollingText() {
+            const wrapper = document.getElementById('scrollingWrapper');
+            if (!wrapper) return;
+            
+            const textContent = "Try saying: " + examplePhrases.join(" &nbsp; • &nbsp; ");
+            
+            // Create two identical divs for the infinite loop effect
+            for (let i = 0; i < 2; i++) {
+                const div = document.createElement('div');
+                div.className = 'scrolling-text';
+                div.innerHTML = textContent;
+                wrapper.appendChild(div);
+            }
+        }
+        
+        // Initialize immediately
+        initScrollingText();
+
         const recordBtn = document.getElementById('recordBtn');
         const statusDiv = document.getElementById('status');
         const resultDiv = document.getElementById('result');
@@ -563,7 +629,8 @@
                 renderNufiWithAudio(bestMatch, largeTranslation);
                 
                 // Auto-play logic: ONLY play for Large model match
-                const isGoodMatch = bestMatch.match_score >= 95 && bestMatch.sentence_audio_url &&
+                // Set threshold to 90% to catch excellent semantic matches like "Je suis à l'aise" (90.5%)
+                const isGoodMatch = bestMatch.match_score >= 90 && bestMatch.sentence_audio_url &&
                                    (bestMatch.match_type === 'exact' || bestMatch.match_type === 'multi-word' || bestMatch.match_type === 'semantic');
                 
                 if (isGoodMatch) {
