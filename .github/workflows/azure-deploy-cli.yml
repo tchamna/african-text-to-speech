@@ -36,7 +36,7 @@ jobs:
       run: |
         az webapp config container set \
           --name ${{ env.AZURE_WEBAPP_NAME }} \
-          --resource-group rag-ai-foundations-demo-rg \
+          --resource-group appsvc_linux_canadacentral_premium \
           --docker-custom-image-name ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest \
           --docker-registry-server-url https://${{ env.ACR_NAME }}.azurecr.io
 
@@ -44,7 +44,7 @@ jobs:
       run: |
         az webapp restart \
           --name ${{ env.AZURE_WEBAPP_NAME }} \
-          --resource-group rag-ai-foundations-demo-rg
+          --resource-group appsvc_linux_canadacentral_premium
 
     - name: Deployment complete
       run: |

@@ -21,8 +21,6 @@ Thumbs.db
 # Audio uploads
 uploads/
 audio/
-*.csv 
-
 
 # Logs
 *.log
@@ -37,11 +35,5 @@ audio/
 *.swp
 *.swo
 
-# Model files
+# Model files (only large models, not assets)
 *.pt
-*.bin
-*.pkl
-
-# Large assets
-assets/*.bin
-assets/*.pkl

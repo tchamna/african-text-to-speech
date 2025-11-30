@@ -27,15 +27,16 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY app.py .
 COPY startup.txt .
+COPY download_assets.py .
 
 # Copy templates folder
 COPY templates/ templates/
 
-# Copy assets (CSV, FAISS index, etc.)
-COPY assets/ assets/
+# Create directories for uploads, audio, static, and assets
+RUN mkdir -p uploads audio static assets
 
-# Create directories for uploads, audio, and static
-RUN mkdir -p uploads audio static
+# Note: assets/ will be downloaded from Azure Storage at runtime
+# This keeps private data out of the git repository
 
 # Expose port 8000
 EXPOSE 8000
@@ -44,5 +45,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/ || exit 1
 
-# Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--timeout", "600", "--workers", "1", "app:app"]
+# Startup: download assets, then run gunicorn
+CMD python download_assets.py && gunicorn --bind 0.0.0.0:8000 --timeout 600 --workers 1 app:app
