@@ -98,11 +98,26 @@ try:
     # Rename Francais column to French for consistency
     if 'Francais' in df.columns:
         df.rename(columns={'Francais': 'French'}, inplace=True)
+    
     # Add row_id column (1-based to match audio file numbering)
+    # We do this BEFORE removing duplicates to preserve the mapping to the original audio files
     df['row_id'] = df.index + 1
+
+    # Ensure consistency with the FAISS index (remove duplicates)
+    # This MUST match the logic in tests/build_index.py
+    df['French'] = df['French'].astype(str).str.strip() # Keep case for display, normalize later for search
+    initial_count = len(df)
+    df.drop_duplicates(subset=['French'], keep='first', inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    
     # Ensure columns exist, normalize if needed
-    df['French'] = df['French'].astype(str).str.lower().str.strip()
-    print(f"Phrasebook loaded successfully: {len(df)} entries")
+    
+    # Ensure columns exist, normalize if needed
+    # We keep the original 'French' column for display, and create a normalized one for search in find_closest_match
+    # df['French'] = df['French'].astype(str).str.lower().str.strip() # This was overwriting the display text with lowercase!
+    # Let's fix that too.
+    
+    print(f"Phrasebook loaded successfully: {len(df)} entries (removed {initial_count - len(df)} duplicates)")
 except Exception as e:
     print(f"Error loading phrasebook: {e}")
     df = pd.DataFrame(columns=['French', 'Nufi', 'row_id'])
@@ -186,6 +201,24 @@ def find_closest_match(text):
         print(f"Exact match: '{result['French']}' (score: 100)")
         return result
     
+    # Initialize best match candidate
+    best_match = None
+    best_score = -1
+    
+    # Helper to update best match
+    def update_best_match(candidate, score, match_type):
+        nonlocal best_match, best_score
+        if score > best_score:
+            best_score = score
+            best_match = candidate
+            best_match['match_score'] = score
+            best_match['match_type'] = match_type
+            # Add audio URLs
+            row_id = best_match.get('row_id')
+            best_match['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
+            best_match['word_audio'] = parse_nufi_words_with_audio(best_match.get('Nufi', ''))
+            print(f"New best match ({match_type}): '{best_match['French']}' (score: {score})")
+
     # Step 2: Multi-word phrase match - prioritize matches with multiple query words
     # Keep contractions together (e.g., "m'appelle" stays as one word)
     # Also keep short important words like "je", "tu", "il"
@@ -213,18 +246,19 @@ def find_closest_match(text):
                     # Sort: prioritize phrases starting with query, then prefer shorter (more general) phrases
                     multi_matches = multi_matches.sort_values(['starts_with_query', 'length'], ascending=[False, True])
                     
-                    result = multi_matches.iloc[0].to_dict()
-                    result['match_score'] = 95 - (5 * (len(query_words) - i))  # Higher score for more words matched
-                    result['match_type'] = 'multi-word'
-                    # Add audio URLs
-                    row_id = result.get('row_id')
-                    result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
-                    result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
-                    print(f"Multi-word match on {word_combo}: '{result['French']}' (score: {result['match_score']})")
-                    return result
+                    candidate = multi_matches.iloc[0].to_dict()
+                    # Penalize if we only matched a small part of the query
+                    match_ratio = i / len(query_words)
+                    base_score = 95 - (5 * (len(query_words) - i))
+                    adjusted_score = base_score * match_ratio if match_ratio < 0.5 else base_score
+                    
+                    update_best_match(candidate, adjusted_score, 'multi-word')
+                    break # Found the longest combo, stop looking for shorter ones in this step
+            if best_match and best_match['match_type'] == 'multi-word':
+                break
     
     # Step 3: Single-word partial match - find sentences containing any significant word
-    if query_words:
+    if query_words and (not best_match or best_score < 60):
         # Only use words >=3 chars for single-word matching to avoid false positives
         significant_words = [w for w in query_words if len(w) >= 3]
         for word in significant_words[:3]:  # Check first 3 significant words
@@ -235,15 +269,9 @@ def find_closest_match(text):
                 word_matches['starts_with_word'] = word_matches['French'].str.lower().str.startswith(word)
                 word_matches['length'] = word_matches['French'].str.len()
                 word_matches = word_matches.sort_values(['starts_with_word', 'length'], ascending=[False, True])
-                result = word_matches.iloc[0].to_dict()
-                result['match_score'] = 85
-                result['match_type'] = 'single-word'
-                # Add audio URLs
-                row_id = result.get('row_id')
-                result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
-                result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
-                print(f"Single-word match on '{word}': '{result['French']}' (score: 85)")
-                return result
+                candidate = word_matches.iloc[0].to_dict()
+                update_best_match(candidate, 60, 'single-word') # Lower score for single word
+                break
     
     # Step 4: Substring contains match (for exact phrase)
     contains_matches = df[df['French'].str.lower().str.contains(query_normalized, na=False, regex=False)]
@@ -252,15 +280,8 @@ def find_closest_match(text):
         contains_matches = contains_matches.copy()
         contains_matches['length'] = contains_matches['French'].str.len()
         contains_matches = contains_matches.sort_values('length')
-        result = contains_matches.iloc[0].to_dict()
-        result['match_score'] = 90
-        result['match_type'] = 'contains'
-        # Add audio URLs
-        row_id = result.get('row_id')
-        result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
-        result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
-        print(f"Contains match: '{result['French']}' (score: 90)")
-        return result
+        candidate = contains_matches.iloc[0].to_dict()
+        update_best_match(candidate, 90, 'contains')
     
     # Step 6: Token-based match (all query words present)
     query_tokens = set(query_normalized.split())
@@ -275,15 +296,8 @@ def find_closest_match(text):
             token_matches = token_matches.copy()
             token_matches['length'] = token_matches['French'].str.len()
             token_matches = token_matches.sort_values('length')
-            result = token_matches.iloc[0].to_dict()
-            result['match_score'] = 80
-            result['match_type'] = 'token'
-            # Add audio URLs
-            row_id = result.get('row_id')
-            result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
-            result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
-            print(f"Token match: '{result['French']}' (score: 80)")
-            return result
+            candidate = token_matches.iloc[0].to_dict()
+            update_best_match(candidate, 80, 'token')
     
     # Step 7: Semantic search as fallback (for paraphrases and close meanings)
     query_embedding = embedding_model.encode([text], convert_to_numpy=True).astype('float32')
@@ -293,23 +307,19 @@ def find_closest_match(text):
     distances, indices = faiss_index.search(query_embedding, k)
     
     best_idx = indices[0][0]
-    best_score = float(distances[0][0])
-    score_percentage = best_score * 100
+    semantic_score = float(distances[0][0]) * 100
     
-    print(f"Semantic match: '{df.iloc[best_idx]['French']}' (score: {score_percentage:.1f})")
+    print(f"Semantic match candidate: '{df.iloc[best_idx]['French']}' (score: {semantic_score:.1f})")
     
     # Only use semantic if score is reasonably high
-    if best_score > 0.65:  # 65% similarity threshold
-        result = df.iloc[best_idx].to_dict()
-        result['match_score'] = score_percentage
-        result['match_type'] = 'semantic'
-        # Add audio URLs
-        row_id = result.get('row_id')
-        result['sentence_audio_url'] = get_audio_url('phrasebook', f'nufi_phrasebook_{row_id}.mp3') if row_id else None
-        result['word_audio'] = parse_nufi_words_with_audio(result.get('Nufi', ''))
-        return result
+    if semantic_score > 65:  # 65% similarity threshold
+        candidate = df.iloc[best_idx].to_dict()
+        # If semantic score is significantly better than text match, take it
+        # Or if we have no text match
+        if not best_match or semantic_score > best_score:
+             update_best_match(candidate, semantic_score, 'semantic')
     
-    return None
+    return best_match
 
 def find_top_semantic_matches(text, top_k=5):
     """
@@ -422,11 +432,17 @@ def process_audio():
                 txt = model_outputs[key]['text']
                 matches[key] = find_closest_match(txt) if txt else None
 
+            # Calculate top semantic matches for the large model (best quality)
+            top_matches = []
+            if model_outputs['large']['text']:
+                top_matches = find_top_semantic_matches(model_outputs['large']['text'], 5)
+
             response = {
                 'transcription': model_outputs['large']['text'],
                 'detected_language': detected_lang_large,
                 'model_used': WHISPER_MODEL_SIZE,
                 'match': matches['large'],
+                'top_matches': top_matches,
                 'transcription_small': model_outputs['small']['text'],
                 'transcription_medium': model_outputs['medium']['text'],
                 'transcription_large': model_outputs['large']['text'],
@@ -455,23 +471,25 @@ def process_audio():
                 'match': None
             }), 400
 
+        # Calculate best hybrid match (Exact > Token > Semantic)
+        best_match = find_closest_match(transcription) if transcription else None
+        
+        # Calculate top semantic matches for the list
         top_matches = find_top_semantic_matches(transcription, 5) if transcription else []
-        # Use the best semantic match for main display in production
-        best_semantic_match = top_matches[0] if top_matches else None
 
         response = {
             'transcription': transcription,
             'detected_language': detected_lang,
             'model_used': WHISPER_MODEL_SIZE,
-            'match': best_semantic_match,  # Show semantic match in main panel
+            'match': best_match,  # Show best hybrid match in main panel
             'top_matches': top_matches,
             # For frontend compatibility: duplicate in production
             'transcription_small': transcription,
             'transcription_medium': transcription,
             'transcription_large': transcription,
-            'match_small': best_semantic_match,
-            'match_medium': best_semantic_match,
-            'match_large': best_semantic_match
+            'match_small': best_match,
+            'match_medium': best_match,
+            'match_large': best_match
         }
         return jsonify(response)
 

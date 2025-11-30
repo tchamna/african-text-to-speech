@@ -192,6 +192,17 @@
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
+        
+        // Silence detection variables
+        let audioContext;
+        let analyser;
+        let microphone;
+        let silenceTimer;
+        let initialSilenceTimer;
+        let hasSpoken = false;
+        let shouldSend = true;
+        const SILENCE_THRESHOLD = 0.02; // Adjust based on microphone sensitivity
+        const SILENCE_DURATION = 10000; // 10 seconds
 
         recordBtn.addEventListener('click', toggleRecording);
         
@@ -287,26 +298,110 @@
                         audioChunks.push(event.data);
                     };
 
-                    mediaRecorder.onstop = sendAudio;
+                    mediaRecorder.onstop = () => {
+                        if (shouldSend) {
+                            sendAudio();
+                        } else {
+                            statusDiv.textContent = 'Recording cancelled (timeout).';
+                        }
+                        cleanupAudioContext();
+                    };
 
                     audioChunks = [];
                     mediaRecorder.start();
                     isRecording = true;
+                    shouldSend = true; // Default to sending
+                    hasSpoken = false;
+                    
                     recordBtn.textContent = '⏹️ Stop Recording';
                     recordBtn.classList.add('recording');
-                    statusDiv.textContent = 'Recording...';
+                    statusDiv.textContent = 'Recording... (Speak now)';
                     resultDiv.style.display = 'none';
+                    
+                    // Setup silence detection
+                    setupSilenceDetection(stream);
+                    
                 } catch (err) {
                     console.error('Error accessing microphone:', err);
                     statusDiv.textContent = 'Error: Could not access microphone. Please allow permissions.';
                 }
             } else {
+                stopRecording(true); // Manual stop always sends
+            }
+        }
+        
+        function stopRecording(send) {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                shouldSend = send;
                 mediaRecorder.stop();
                 isRecording = false;
                 recordBtn.textContent = '🎤 Start Recording';
                 recordBtn.classList.remove('recording');
-                statusDiv.textContent = 'Processing...';
+                if (send) {
+                    statusDiv.textContent = 'Processing...';
+                }
             }
+        }
+        
+        function setupSilenceDetection(stream) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            microphone = audioContext.createMediaStreamSource(stream);
+            const scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
+
+            analyser.fftSize = 2048;
+            microphone.connect(analyser);
+            analyser.connect(scriptProcessor);
+            scriptProcessor.connect(audioContext.destination);
+
+            // Initial silence timeout (reset if no speech within 10s)
+            initialSilenceTimer = setTimeout(() => {
+                if (!hasSpoken) {
+                    console.log("Initial silence timeout - resetting");
+                    stopRecording(false); // Stop and DO NOT send
+                }
+            }, SILENCE_DURATION);
+
+            scriptProcessor.onaudioprocess = function() {
+                if (!isRecording) return;
+                
+                const array = new Uint8Array(analyser.frequencyBinCount);
+                analyser.getByteFrequencyData(array);
+                
+                // Calculate average volume
+                let values = 0;
+                const length = array.length;
+                for (let i = 0; i < length; i++) {
+                    values += array[i];
+                }
+                const average = values / length;
+                const volume = average / 255; // Normalize to 0-1
+
+                if (volume > SILENCE_THRESHOLD) {
+                    // Speech detected
+                    if (!hasSpoken) {
+                        hasSpoken = true;
+                        clearTimeout(initialSilenceTimer);
+                        statusDiv.textContent = 'Recording... (Speech detected)';
+                    }
+                    
+                    // Reset post-speech silence timer
+                    clearTimeout(silenceTimer);
+                    silenceTimer = setTimeout(() => {
+                        console.log("Post-speech silence timeout - sending");
+                        stopRecording(true); // Stop and SEND
+                    }, SILENCE_DURATION);
+                }
+            };
+        }
+        
+        function cleanupAudioContext() {
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            clearTimeout(silenceTimer);
+            clearTimeout(initialSilenceTimer);
         }
 
         async function sendAudio() {
@@ -430,11 +525,7 @@
                 if (data.match_small) {
                     smallMatch.textContent = data.match_small.French || 'N/A';
                     renderNufiWithAudio(data.match_small, smallTranslation);
-                    // Auto-play sentence audio for exact or multi-word match (score >= 95)
-                    if ((data.match_small.match_score >= 95 && data.match_small.sentence_audio_url &&
-                         (data.match_small.match_type === 'exact' || data.match_small.match_type === 'multi-word')) ) {
-                        setTimeout(() => playSentenceAudio(data.match_small.sentence_audio_url), 300);
-                    }
+                    // Auto-play removed for Small model as per user request
                 } else {
                     smallMatch.textContent = 'No match';
                     smallTranslation.textContent = 'N/A';
@@ -450,13 +541,7 @@
                 if (data.match_medium) {
                     mediumMatch.textContent = data.match_medium.French || 'N/A';
                     renderNufiWithAudio(data.match_medium, mediumTranslation);
-                    // Auto-play sentence audio for exact or multi-word match (only if Small didn't already play)
-                    if ((data.match_medium.match_score >= 95 && data.match_medium.sentence_audio_url &&
-                         (data.match_medium.match_type === 'exact' || data.match_medium.match_type === 'multi-word')) &&
-                        (!data.match_small || data.match_small.match_score < 95 ||
-                         (data.match_small.match_type !== 'exact' && data.match_small.match_type !== 'multi-word')) ) {
-                        setTimeout(() => playSentenceAudio(data.match_medium.sentence_audio_url), 300);
-                    }
+                    // Auto-play removed for Medium model as per user request
                 } else {
                     mediumMatch.textContent = 'No match';
                     mediumTranslation.textContent = 'N/A';
@@ -470,39 +555,18 @@
             
             largeText.textContent = data.transcription_large || 'N/A';
             
-            // In production mode, show the best semantic match; in development mode, show the hybrid match
-            // We detect production mode by the presence of top_matches which is only sent in production
-            const isProduction = data.top_matches !== undefined;
-            const bestMatch = isProduction && data.top_matches && data.top_matches.length > 0 ? data.top_matches[0] : data.match_large;
+            // Use the match provided by the backend (which is now the best hybrid match in both modes)
+            const bestMatch = data.match_large;
             
             if (bestMatch) {
                 largeMatch.textContent = bestMatch.French || 'N/A';
                 renderNufiWithAudio(bestMatch, largeTranslation);
                 
-                // Auto-play logic
-                // In production: play if best match is good (ignore small/medium as they are duplicates)
-                // In development: play only if small/medium didn't already play
+                // Auto-play logic: ONLY play for Large model match
                 const isGoodMatch = bestMatch.match_score >= 95 && bestMatch.sentence_audio_url &&
                                    (bestMatch.match_type === 'exact' || bestMatch.match_type === 'multi-word' || bestMatch.match_type === 'semantic');
                 
-                let shouldPlay = false;
                 if (isGoodMatch) {
-                    if (isProduction) {
-                        shouldPlay = true;
-                    } else {
-                        // Development mode checks
-                        const mediumPlayed = data.match_medium && data.match_medium.match_score >= 95 && 
-                                            (data.match_medium.match_type === 'exact' || data.match_medium.match_type === 'multi-word' || data.match_medium.match_type === 'semantic');
-                        const smallPlayed = data.match_small && data.match_small.match_score >= 95 && 
-                                           (data.match_small.match_type === 'exact' || data.match_small.match_type === 'multi-word' || data.match_small.match_type === 'semantic');
-                        
-                        if (!mediumPlayed && !smallPlayed) {
-                            shouldPlay = true;
-                        }
-                    }
-                }
-
-                if (shouldPlay) {
                     setTimeout(() => playSentenceAudio(bestMatch.sentence_audio_url), 300);
                 }
             } else {
@@ -578,31 +642,6 @@
                         'Medium: "' + medium + '"<br>' +
                         'Large-v3: "' + large + '"';
                     comparisonText.style.color = '#856404';
-                }
-            }
-            
-            // Auto-play sentence audio if any two models agree on the French match AND both have exact match (score 100)
-            const frenchSmall = data.match_small?.French?.toLowerCase().trim();
-            const frenchMedium = data.match_medium?.French?.toLowerCase().trim();
-            const frenchLarge = data.match_large?.French?.toLowerCase().trim();
-            let audioUrl = null;
-            if (frenchSmall && frenchMedium && frenchSmall === frenchMedium &&
-                data.match_small?.match_score === 100 && data.match_medium?.match_score === 100) {
-                audioUrl = data.match_small?.sentence_audio_url || data.match_medium?.sentence_audio_url;
-            }
-            else if (frenchSmall && frenchLarge && frenchSmall === frenchLarge &&
-                data.match_small?.match_score === 100 && data.match_large?.match_score === 100) {
-                audioUrl = data.match_small?.sentence_audio_url || data.match_large?.sentence_audio_url;
-            }
-            else if (frenchMedium && frenchLarge && frenchMedium === frenchLarge &&
-                data.match_medium?.match_score === 100 && data.match_large?.match_score === 100) {
-                audioUrl = data.match_medium?.sentence_audio_url || data.match_large?.sentence_audio_url;
-            }
-            if (audioUrl) {
-                // Only play once per result
-                if (!window._lastAutoPlayed || window._lastAutoPlayed !== audioUrl) {
-                    window._lastAutoPlayed = audioUrl;
-                    setTimeout(() => playSentenceAudio(audioUrl), 300);
                 }
             }
             

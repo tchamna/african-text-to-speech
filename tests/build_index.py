@@ -16,6 +16,13 @@ df = pd.read_csv('assets/Nufi_Francais_phrasebook.csv')
 if 'Francais' in df.columns:
     df.rename(columns={'Francais': 'French'}, inplace=True)
 df['French'] = df['French'].astype(str).str.strip()
+
+# Remove duplicates
+initial_count = len(df)
+df.drop_duplicates(subset=['French'], keep='first', inplace=True)
+df.reset_index(drop=True, inplace=True)
+print(f"✓ Removed {initial_count - len(df)} duplicates")
+
 print(f"✓ Loaded {len(df)} entries")
 
 print("\nLoading sentence embedding model...")
