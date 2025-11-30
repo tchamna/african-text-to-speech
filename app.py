@@ -12,7 +12,7 @@ import soundfile as sf
 
 app = Flask(__name__)
 
-az storage account show-connection-string --name africanobjectaudio --resource-group rag-ai-foundations-demo-rg --query connectionString --output tsv# Azure Blob Storage base URLs for audio files (fallback when local files don't exist)
+# Azure Blob Storage base URLs for audio files (fallback when local files don't exist)
 AZURE_BLOB_BASE_URL = "https://africanobjectaudio.blob.core.windows.net"
 PHRASEBOOK_AUDIO_URL = f"{AZURE_BLOB_BASE_URL}/nufi-phrasebook-audio"
 DICTIONARY_AUDIO_URL = f"{AZURE_BLOB_BASE_URL}/word-dictionary-audio"
