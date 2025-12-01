@@ -12,6 +12,13 @@
 
 This project serves as a demonstration of applying modern AI to low-resource language preservation and education.
 
+## 🌐 Live Demo
+
+Try the live version of AfricanVoice deployed on Azure:  
+**[https://african-text-to-speech-ehajh7daazdfhzft.canadacentral-01.azurewebsites.net/](https://african-text-to-speech-ehajh7daazdfhzft.canadacentral-01.azurewebsites.net/)**
+
+No installation required - just click the link and start speaking!
+
 ## 🧠 Key AI & Machine Learning Features
 
 ### 1. Advanced Speech Recognition (ASR)
