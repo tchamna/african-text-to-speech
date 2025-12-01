@@ -137,6 +137,11 @@
                     <option value="pt">Portuguese (Português)</option>
                 </select>
             </div>
+            <div style="margin-bottom: 15px;">
+                <label for="silenceDuration" style="font-weight: bold; margin-right: 10px;">⏱️ Silence Duration (seconds):</label>
+                <input type="range" id="silenceDuration" min="1" max="10" value="3" step="0.5" style="cursor: pointer;">
+                <span id="silenceValue" style="margin-left: 10px; font-weight: bold; color: #e67e22;">3.0s</span>
+            </div>
             <button id="recordBtn">🎤 Start Recording</button>
         </div>
         
@@ -247,6 +252,11 @@
 
         const recordBtn = document.getElementById('recordBtn');
         const statusDiv = document.getElementById('status');
+        const countdownDiv = document.createElement('div');
+        countdownDiv.id = 'countdown';
+        countdownDiv.style.cssText = 'font-weight: bold; color: #e67e22; min-height: 20px; margin-top: 5px;';
+        statusDiv.parentNode.insertBefore(countdownDiv, statusDiv.nextSibling);
+
         const resultDiv = document.getElementById('result');
         const transcriptionText = document.getElementById('transcriptionText');
         const matchedFrench = document.getElementById('matchedFrench');
@@ -268,7 +278,28 @@
         let hasSpoken = false;
         let shouldSend = true;
         const SILENCE_THRESHOLD = 0.02; // Adjust based on microphone sensitivity
-        const SILENCE_DURATION = 5000; // 5 seconds
+        let SILENCE_DURATION = 3000; // Default 3 seconds, will be updated from slider
+        
+        // Continuous listening variables
+        let processingQueue = [];
+        let isProcessing = false;
+        let continuousMode = false;
+        let isResetting = false;
+        
+        // Countdown variables
+        let lastSpeechTime = 0;
+        let countdownInterval;
+
+        // Setup silence duration slider
+        const silenceSlider = document.getElementById('silenceDuration');
+        const silenceValue = document.getElementById('silenceValue');
+        silenceSlider.addEventListener('input', () => {
+            const value = parseFloat(silenceSlider.value);
+            SILENCE_DURATION = value * 1000; // Convert to milliseconds
+            silenceValue.textContent = value.toFixed(1) + 's';
+        });
+        // Initialize
+        silenceSlider.dispatchEvent(new Event('input'));
 
         recordBtn.addEventListener('click', toggleRecording);
         
@@ -361,27 +392,34 @@
                     mediaRecorder = new MediaRecorder(stream);
                     
                     mediaRecorder.ondataavailable = (event) => {
+                        if (isResetting) return;
                         audioChunks.push(event.data);
                     };
 
                     mediaRecorder.onstop = () => {
-                        if (shouldSend) {
+                        // In continuous mode, don't stop on onstop event
+                        if (!continuousMode && shouldSend) {
                             sendAudio();
-                        } else {
+                        } else if (!continuousMode) {
                             statusDiv.textContent = 'Recording cancelled (timeout).';
                         }
-                        cleanupAudioContext();
+                        if (!continuousMode) {
+                            cleanupAudioContext();
+                        }
                     };
 
                     audioChunks = [];
-                    mediaRecorder.start();
+                    mediaRecorder.start(200); // Capture chunks every 200ms to ensure data is available
                     isRecording = true;
-                    shouldSend = true; // Default to sending
+                    continuousMode = true;
+                    shouldSend = true;
                     hasSpoken = false;
+                    processingQueue = [];
+                    isProcessing = false;
                     
-                    recordBtn.textContent = '⏹️ Stop Recording';
+                    recordBtn.textContent = '⏹️ Stop Listening';
                     recordBtn.classList.add('recording');
-                    statusDiv.textContent = 'Recording... (Speak now)';
+                    statusDiv.textContent = 'Listening... (Speak now)';
                     resultDiv.style.display = 'none';
                     
                     // Setup silence detection
@@ -392,7 +430,9 @@
                     statusDiv.textContent = 'Error: Could not access microphone. Please allow permissions.';
                 }
             } else {
-                stopRecording(true); // Manual stop always sends
+                // User manually stopped - exit continuous mode
+                continuousMode = false;
+                stopRecording(true);
             }
         }
         
@@ -423,8 +463,15 @@
             // Initial silence timeout (reset if no speech within 5s)
             initialSilenceTimer = setTimeout(() => {
                 if (!hasSpoken) {
-                    console.log("Initial silence timeout - resetting");
-                    stopRecording(false); // Stop and DO NOT send
+                    console.log("Initial silence timeout - no speech detected");
+                    if (continuousMode) {
+                        // In continuous mode, just reset and keep listening
+                        audioChunks = [];
+                        hasSpoken = false;
+                        statusDiv.textContent = 'Listening... (no speech detected, continuing)';
+                    } else {
+                        stopRecording(false); // Stop and DO NOT send
+                    }
                 }
             }, SILENCE_DURATION);
 
@@ -446,28 +493,169 @@
                 if (volume > SILENCE_THRESHOLD) {
                     // Speech detected
                     if (!hasSpoken) {
+                        console.log("Speech detected (start)");
                         hasSpoken = true;
+                        startCountdownDisplay();
+                        
+                        // In continuous mode, trim leading silence to avoid sending huge files
+                        // Keep last 5 chunks (approx 1 second) for context
+                        if (continuousMode && audioChunks.length > 5) {
+                            console.log(`Trimming silence. Keeping last 5 of ${audioChunks.length} chunks`);
+                            // Preserve the header (chunk 0) and keep the last 5 chunks
+                            const header = audioChunks[0];
+                            const recent = audioChunks.slice(-5);
+                            audioChunks = [header, ...recent];
+                        }
+
                         clearTimeout(initialSilenceTimer);
-                        statusDiv.textContent = 'Recording... (Speech detected)';
+                        statusDiv.textContent = continuousMode ? 'Listening... (Speech detected)' : 'Recording... (Speech detected)';
                     }
                     
-                    // Reset post-speech silence timer (send after 5s of silence)
+                    // Reset post-speech silence timer
+                    lastSpeechTime = Date.now();
                     clearTimeout(silenceTimer);
                     silenceTimer = setTimeout(() => {
-                        console.log("Post-speech silence timeout - sending");
-                        stopRecording(true); // Stop and SEND
+                        console.log("Post-speech silence timeout - processing segment");
+                        if (continuousMode) {
+                            // Queue the segment and continue listening
+                            queueAudioSegment();
+                        } else {
+                            // Original behavior: stop and send
+                            stopRecording(true);
+                        }
                     }, SILENCE_DURATION);
                 }
             };
         }
         
         function cleanupAudioContext() {
-            if (audioContext) {
+            if (audioContext && !continuousMode) {
                 audioContext.close();
                 audioContext = null;
             }
             clearTimeout(silenceTimer);
             clearTimeout(initialSilenceTimer);
+            clearInterval(countdownInterval);
+            if (countdownDiv) countdownDiv.textContent = '';
+        }
+
+        function startCountdownDisplay() {
+            clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {
+                if (!isRecording || !hasSpoken) {
+                    countdownDiv.textContent = '';
+                    return;
+                }
+                
+                const elapsed = Date.now() - lastSpeechTime;
+                const remaining = Math.max(0, SILENCE_DURATION - elapsed);
+                const seconds = (remaining / 1000).toFixed(1);
+                
+                if (remaining <= 0) {
+                    countdownDiv.textContent = 'Processing...';
+                } else {
+                    countdownDiv.textContent = `Processing in ${seconds}s`;
+                }
+            }, 100);
+        }
+
+        function queueAudioSegment() {
+            if (audioChunks.length === 0) {
+                console.log('No audio to queue');
+                hasSpoken = false;
+                return;
+            }
+            
+            // Create a blob from current chunks and add to queue
+            const segmentBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            if (segmentBlob.size < 1000) {
+                console.log('Segment too small, skipping');
+                audioChunks = [];
+                hasSpoken = false;
+                return;
+            }
+            
+            processingQueue.push(segmentBlob);
+            console.log(`Queued segment. Queue length: ${processingQueue.length}. isProcessing: ${isProcessing}`);
+            
+            // Clear chunks for next segment
+            audioChunks = [];
+            hasSpoken = false;
+            
+            // Restart recorder to ensure valid WebM header for next segment
+            if (isRecording && continuousMode) {
+                isResetting = true;
+                mediaRecorder.stop();
+                setTimeout(() => {
+                    if (isRecording && continuousMode) {
+                        mediaRecorder.start(200);
+                        isResetting = false;
+                        console.log("Recorder restarted for next segment");
+                    }
+                }, 200);
+            }
+            
+            // Update status
+            if (isProcessing) {
+                statusDiv.textContent = `Listening... (${processingQueue.length} in queue)`;
+            } else {
+                statusDiv.textContent = 'Listening... (processing)';
+            }
+            
+            // Start processing if not already processing
+            if (!isProcessing) {
+                console.log("Starting processQueue from queueAudioSegment");
+                processQueue();
+            }
+        }
+        
+        async function processQueue() {
+            console.log(`processQueue called. Queue length: ${processingQueue.length}`);
+            if (processingQueue.length === 0) {
+                isProcessing = false;
+                if (continuousMode) {
+                    statusDiv.textContent = 'Listening...';
+                }
+                return;
+            }
+            
+            isProcessing = true;
+            const segmentBlob = processingQueue.shift();
+            
+            const formData = new FormData();
+            formData.append('audio', segmentBlob, 'segment.webm');
+            const language = document.getElementById('languageSelect').value;
+            formData.append('language', language);
+            
+            try {
+                const queueInfo = processingQueue.length > 0 ? ` (${processingQueue.length} in queue)` : '';
+                statusDiv.textContent = `Processing...${queueInfo}`;
+                
+                const response = await fetch('/process_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayResult(data);
+                    if (continuousMode) {
+                        statusDiv.textContent = processingQueue.length > 0 ? 
+                            `Listening... (${processingQueue.length} in queue)` : 'Listening...';
+                    } else {
+                        statusDiv.textContent = 'Done';
+                    }
+                } else {
+                    statusDiv.textContent = 'Error: ' + (data.error || 'Unknown error');
+                }
+            } catch (err) {
+                console.error('Error processing segment:', err);
+                statusDiv.textContent = 'Network error occurred.';
+            }
+            
+            // Process next item in queue
+            setTimeout(() => processQueue(), 100);
         }
 
         async function sendAudio() {

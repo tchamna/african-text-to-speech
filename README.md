@@ -36,7 +36,10 @@ To ensure the highest relevance, the system employs a tiered search strategy:
 
 ### 4. Smart Audio Processing
 - **Silence Detection:** Real-time analysis of microphone input stream to detect speech onset and offset.
-- **Auto-Stop:** Automatically stops recording after 10 seconds of silence to streamline the user experience.
+- **Auto-Stop:** Automatically stops recording after user-configurable silence duration (1-10 seconds).
+- **Continuous Listening:** Advanced mode that segments speech after silence and processes multiple utterances sequentially.
+- **Countdown Timer:** Visual countdown showing when the next processing will occur.
+- **Queue System:** Handles multiple speech segments in continuous mode without interruption.
 
 ## 🛠️ Tech Stack
 
@@ -55,6 +58,8 @@ To ensure the highest relevance, the system employs a tiered search strategy:
 - **Core:** HTML5, CSS3, JavaScript (ES6+)
 - **Audio:** Web Audio API (Real-time visualization and silence detection)
 - **Templating:** Jinja2
+- **User Controls:** Adjustable silence duration slider (1-10 seconds), language selection, drag-and-drop file upload
+- **Continuous Mode:** Real-time countdown timer, queue management for multiple utterances
 
 ### Infrastructure & Data
 - **Storage:** Azure Blob Storage (for hosting audio assets)
@@ -114,6 +119,28 @@ AfricanVoice/
 
 6. **Access the UI:**
    Open `http://127.0.0.1:5001` in your browser.
+
+## 🎙️ Usage Guide
+
+### Basic Recording
+1. Click "🎤 Start Recording"
+2. Wait for "Listening..." status
+3. Speak clearly in French, English, or Spanish
+4. The system will automatically detect silence and process your speech
+5. Results appear with transcription, translation, and audio playback
+
+### Advanced Features
+- **Adjustable Silence Duration:** Use the slider to set how long to wait after speech before processing (1-10 seconds)
+- **Continuous Listening:** The app automatically keeps listening for multiple utterances
+- **Countdown Timer:** Shows "Processing in X.Ys" to indicate when the next segment will be processed
+- **Language Selection:** Choose your input language for better transcription accuracy
+- **File Upload:** Drag and drop audio files for batch processing
+
+### Tips for Best Results
+- Speak clearly and at normal volume
+- Adjust silence duration based on your speaking pace (faster speakers may prefer shorter durations)
+- Allow microphone access when prompted
+- For continuous conversations, the system will process each pause automatically
 
 ## 🔮 Future Improvements
 - Fine-tuning Whisper on African accented French.

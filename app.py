@@ -14,6 +14,7 @@ import soundfile as sf
 
 app = Flask(__name__)
 APP_MODE = os.environ.get('APP_MODE', 'development')
+APP_MODE = os.environ.get('APP_MODE', 'production')
 print(f"APP_MODE set to: {APP_MODE}")
 
 # Azure Blob Storage base URLs for audio files (fallback when local files don't exist)
