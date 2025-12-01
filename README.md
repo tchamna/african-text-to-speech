@@ -122,3 +122,26 @@ AfricanVoice/
 
 ## 📄 License
 MIT License
+
+## ☁️ Azure App Service: Deployment recommendations
+
+When deploying to Azure App Service (Linux containers), large ASR models (e.g. Whisper `large-v3`) can cause startup OOMs or container termination if the host has constrained memory or multiple worker processes are started. Follow these conservative recommendations to keep the app stable in App Service:
+
+- Recommended App Settings (add these as Web App settings / environment variables):
+   - `APP_MODE=production`
+   - `WHISPER_MODEL_SIZE=small` (or `medium` if your plan has >=4GB memory)
+   - `WHISPER_LOAD_EXTRA_MODELS=0` (do not load extra models in App Service)
+   - `WHISPER_FALLBACK_MODEL=small` (fallback if primary fails to load)
+
+- Gunicorn / process recommendations (if you run with Gunicorn inside the container):
+   - Use a single worker to avoid multiple copies of the model in memory:
+      - `workers = 1`
+      - `timeout = 120`
+   - Example `gunicorn.conf.py` is provided in the repo (`gunicorn.conf.py`) with conservative defaults.
+
+- Azure CLI quick command (example):
+   ```powershell
+   az webapp config appsettings set --resource-group <RESOURCE_GROUP> --name <APP_NAME> --settings APP_MODE=production WHISPER_MODEL_SIZE=small WHISPER_LOAD_EXTRA_MODELS=0 WHISPER_FALLBACK_MODEL=small
+   ```
+
+If you need higher accuracy from `large-v3` in production, consider using a managed transcription API (OpenAI or Azure Speech-to-Text) rather than hosting a very large model in App Service. I can help add a toggle to use remote ASR when `USE_REMOTE_ASR=1`.

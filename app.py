@@ -62,14 +62,30 @@ def get_audio_url(audio_type, filename):
 # For local dev with limited RAM, set WHISPER_MODEL_SIZE=small or medium
 WHISPER_MODEL_SIZE = os.environ.get('WHISPER_MODEL_SIZE', 'large-v3')
 print(f"Loading Whisper model: {WHISPER_MODEL_SIZE}...")
-whisper_model = whisper.load_model(WHISPER_MODEL_SIZE)
-print(f"   ✓ Whisper {WHISPER_MODEL_SIZE} loaded successfully!")
+try:
+    whisper_model = whisper.load_model(WHISPER_MODEL_SIZE)
+    print(f"   ✓ Whisper {WHISPER_MODEL_SIZE} loaded successfully!")
+except Exception as e:
+    print(f"Failed to load Whisper model '{WHISPER_MODEL_SIZE}': {e}")
+    # Try falling back to a smaller model to avoid out-of-memory at startup
+    fallback = os.environ.get('WHISPER_FALLBACK_MODEL', 'small')
+    try:
+        print(f"Attempting to load fallback Whisper model: {fallback}")
+        whisper_model = whisper.load_model(fallback)
+        WHISPER_MODEL_SIZE = fallback
+        print(f"   ✓ Fallback Whisper {fallback} loaded successfully!")
+    except Exception as e2:
+        print(f"Critical: Failed to load fallback Whisper model '{fallback}': {e2}")
+        raise
 
 # In development, optionally load additional Whisper models for side-by-side comparison
 whisper_models = {
-    'large': whisper_model  # map "large" panel to the configured main model (default large-v3)
+    'large': whisper_model  # map "large" panel to the configured main model
 }
-if APP_MODE != 'production':
+# Only load additional models in development when explicitly requested via env var.
+# This prevents accidental high-memory loads in constrained hosts (e.g., Azure App Service).
+WHISPER_LOAD_EXTRA = os.environ.get('WHISPER_LOAD_EXTRA_MODELS', '0') == '1'
+if APP_MODE != 'production' and WHISPER_LOAD_EXTRA:
     try:
         print("Loading additional Whisper models for comparison (development mode): small, medium ...")
         whisper_models['small'] = whisper.load_model('small')
@@ -77,6 +93,9 @@ if APP_MODE != 'production':
         print("   ✓ Small and Medium models loaded for comparison")
     except Exception as e:
         print(f"Warning: Failed loading additional models for comparison: {e}")
+else:
+    if APP_MODE != 'production':
+        print("Skipping loading additional Whisper models. Set WHISPER_LOAD_EXTRA_MODELS=1 to enable.")
 
 # Load semantic search model and index
 print("Loading semantic search model...")
@@ -96,12 +115,13 @@ if not os.path.exists(LOG_DIR):
 rejected_log_path = os.path.join(LOG_DIR, 'rejected_semantic.log')
 logger = logging.getLogger('african_voice')
 logger.setLevel(logging.INFO)
-fh = logging.FileHandler(rejected_log_path)
+fh = logging.FileHandler(rejected_log_path, encoding='utf-8')
 fh.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 fh.setFormatter(formatter)
 if not logger.handlers:
     logger.addHandler(fh)
+
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
@@ -423,11 +443,20 @@ def debug_match():
     if not text:
         return jsonify({'error': 'Please provide a `text` parameter'}), 400
 
+    # Allow caller to request how many top semantic matches to return (debug convenience)
+    try:
+        top_k = int(request.values.get('top_k', 5))
+    except Exception:
+        top_k = 5
+    # Constrain top_k to a reasonable range to avoid heavy queries
+    top_k = max(1, min(50, top_k))
+
     best = find_closest_match(text)
-    top = find_top_semantic_matches(text, 5)
+    top = find_top_semantic_matches(text, top_k)
 
     return jsonify({
         'query': text,
+        'top_k': top_k,
         'best_match': best,
         'top_matches': top
     })

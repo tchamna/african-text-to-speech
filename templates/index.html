@@ -268,7 +268,7 @@
         let hasSpoken = false;
         let shouldSend = true;
         const SILENCE_THRESHOLD = 0.02; // Adjust based on microphone sensitivity
-        const SILENCE_DURATION = 10000; // 10 seconds
+        const SILENCE_DURATION = 5000; // 5 seconds
 
         recordBtn.addEventListener('click', toggleRecording);
         
@@ -420,7 +420,7 @@
             analyser.connect(scriptProcessor);
             scriptProcessor.connect(audioContext.destination);
 
-            // Initial silence timeout (reset if no speech within 10s)
+            // Initial silence timeout (reset if no speech within 5s)
             initialSilenceTimer = setTimeout(() => {
                 if (!hasSpoken) {
                     console.log("Initial silence timeout - resetting");
@@ -451,7 +451,7 @@
                         statusDiv.textContent = 'Recording... (Speech detected)';
                     }
                     
-                    // Reset post-speech silence timer
+                    // Reset post-speech silence timer (send after 5s of silence)
                     clearTimeout(silenceTimer);
                     silenceTimer = setTimeout(() => {
                         console.log("Post-speech silence timeout - sending");
