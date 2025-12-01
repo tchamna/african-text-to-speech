@@ -300,7 +300,8 @@ def find_closest_match(text):
                     candidate = multi_matches.iloc[0].to_dict()
                     # Penalize if we only matched a small part of the query
                     match_ratio = i / len(query_words)
-                    base_score = 95 - (5 * (len(query_words) - i))
+                    # Reduced base score from 95 to 85 to allow strong semantic matches to override partial text matches
+                    base_score = 85 - (5 * (len(query_words) - i))
                     adjusted_score = base_score * match_ratio if match_ratio < 0.5 else base_score
 
                     update_best_match(candidate, adjusted_score, 'multi-word')

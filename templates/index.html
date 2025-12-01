@@ -142,6 +142,7 @@
                 <input type="range" id="silenceDuration" min="1" max="10" value="3" step="0.5" style="cursor: pointer;">
                 <span id="silenceValue" style="margin-left: 10px; font-weight: bold; color: #e67e22;">3.0s</span>
             </div>
+            <!-- Microphone sensitivity control removed from UI (kept as configuration only) -->
             <button id="recordBtn">🎤 Start Recording</button>
         </div>
         
@@ -277,8 +278,13 @@
         let initialSilenceTimer;
         let hasSpoken = false;
         let shouldSend = true;
-        const SILENCE_THRESHOLD = 0.02; // Adjust based on microphone sensitivity
+        // Default silence threshold (20% = quiet/ignore most ambient noise)
+        let SILENCE_THRESHOLD = 0.20; // Default - now configured to 20% by default
         let SILENCE_DURATION = 3000; // Default 3 seconds, will be updated from slider
+        
+        // Noise filtering variables
+        let speechStartTime = 0;
+        const MIN_SPEECH_DURATION = 300; // ms of continuous sound required to count as speech
         
         // Continuous listening variables
         let processingQueue = [];
@@ -300,6 +306,32 @@
         });
         // Initialize
         silenceSlider.dispatchEvent(new Event('input'));
+
+        // Sensitivity control: optional — take action only if control exists in the DOM.
+        const thresholdSlider = document.getElementById('silenceThreshold');
+        const thresholdValue = document.getElementById('thresholdValue');
+        if (thresholdSlider && thresholdValue) {
+            thresholdSlider.addEventListener('input', () => {
+                const val = parseInt(thresholdSlider.value);
+                // Map 1-20 to 0.01 - 0.20
+                SILENCE_THRESHOLD = val / 100;
+
+                let label = 'Normal';
+                if (val < 2) label = 'Very Sensitive';
+                else if (val < 4) label = 'Sensitive';
+                else if (val < 8) label = 'Normal';
+                else if (val < 15) label = 'Low Sensitivity';
+                else label = 'Very Low';
+
+                thresholdValue.textContent = `${label} (${val}%)`;
+            });
+            // Initialize
+            thresholdSlider.dispatchEvent(new Event('input'));
+        } else {
+            // No visible control — keep default value and (if present) set label text
+            SILENCE_THRESHOLD = 0.20; // 20%
+            if (thresholdValue) thresholdValue.textContent = `Very Low (20%)`;
+        }
 
         recordBtn.addEventListener('click', toggleRecording);
         
@@ -481,49 +513,78 @@
                 const array = new Uint8Array(analyser.frequencyBinCount);
                 analyser.getByteFrequencyData(array);
                 
-                // Calculate average volume
+                // Calculate voice band volume (approx 300Hz - 3400Hz)
+                // This filters out low frequency noise (table hits) and high frequency hiss
+                const sampleRate = audioContext.sampleRate;
+                const binSize = sampleRate / analyser.fftSize;
+                const startBin = Math.floor(300 / binSize);
+                const endBin = Math.floor(3400 / binSize);
+                
                 let values = 0;
-                const length = array.length;
-                for (let i = 0; i < length; i++) {
+                let binsCounted = 0;
+                
+                for (let i = startBin; i < endBin && i < array.length; i++) {
                     values += array[i];
+                    binsCounted++;
                 }
-                const average = values / length;
+                
+                const average = binsCounted > 0 ? values / binsCounted : 0;
                 const volume = average / 255; // Normalize to 0-1
 
                 if (volume > SILENCE_THRESHOLD) {
-                    // Speech detected
-                    if (!hasSpoken) {
-                        console.log("Speech detected (start)");
-                        hasSpoken = true;
-                        startCountdownDisplay();
-                        
-                        // In continuous mode, trim leading silence to avoid sending huge files
-                        // Keep last 5 chunks (approx 1 second) for context
-                        if (continuousMode && audioChunks.length > 5) {
-                            console.log(`Trimming silence. Keeping last 5 of ${audioChunks.length} chunks`);
-                            // Preserve the header (chunk 0) and keep the last 5 chunks
-                            const header = audioChunks[0];
-                            const recent = audioChunks.slice(-5);
-                            audioChunks = [header, ...recent];
-                        }
-
-                        clearTimeout(initialSilenceTimer);
-                        statusDiv.textContent = continuousMode ? 'Listening... (Speech detected)' : 'Recording... (Speech detected)';
+                    // Potential speech detected
+                    if (speechStartTime === 0) {
+                        speechStartTime = Date.now();
                     }
                     
-                    // Reset post-speech silence timer
-                    lastSpeechTime = Date.now();
-                    clearTimeout(silenceTimer);
-                    silenceTimer = setTimeout(() => {
-                        console.log("Post-speech silence timeout - processing segment");
-                        if (continuousMode) {
-                            // Queue the segment and continue listening
-                            queueAudioSegment();
-                        } else {
-                            // Original behavior: stop and send
-                            stopRecording(true);
+                    const duration = Date.now() - speechStartTime;
+                    
+                    // Only trigger if sound persists longer than MIN_SPEECH_DURATION (filters out claps/noise)
+                    // OR if we are already in a speech session (to catch short words after the initial trigger)
+                    if (duration > MIN_SPEECH_DURATION || hasSpoken) {
+                        // Speech detected
+                        if (!hasSpoken) {
+                            console.log("Speech detected (start)");
+                            hasSpoken = true;
+                            startCountdownDisplay();
+                            
+                            // In continuous mode, trim leading silence to avoid sending huge files
+                            // Keep last 5 chunks (approx 1 second) for context
+                            if (continuousMode && audioChunks.length > 5) {
+                                console.log(`Trimming silence. Keeping last 5 of ${audioChunks.length} chunks`);
+                                // Preserve the header (chunk 0) and keep the last 5 chunks
+                                const header = audioChunks[0];
+                                const recent = audioChunks.slice(-5);
+                                audioChunks = [header, ...recent];
+                            }
+
+                            clearTimeout(initialSilenceTimer);
+                            statusDiv.textContent = continuousMode ? 'Listening... (Speech detected)' : 'Recording... (Speech detected)';
                         }
-                    }, SILENCE_DURATION);
+                        
+                        // Reset post-speech silence timer
+                        lastSpeechTime = Date.now();
+                        clearTimeout(silenceTimer);
+                        silenceTimer = setTimeout(() => {
+                            console.log("Post-speech silence timeout - processing segment");
+                            if (continuousMode) {
+                                // Queue the segment and continue listening
+                                queueAudioSegment();
+                            } else {
+                                // Original behavior: stop and send
+                                stopRecording(true);
+                            }
+                        }, SILENCE_DURATION);
+                    } else if (!hasSpoken) {
+                        // Visual feedback for noise that is being ignored (too short)
+                        statusDiv.textContent = 'Listening... (Ignoring noise)';
+                    }
+                } else {
+                    // Silence detected - reset speech start time
+                    speechStartTime = 0;
+                    if (!hasSpoken && continuousMode && statusDiv.textContent.includes('Ignoring noise')) {
+                        statusDiv.textContent = 'Listening...';
+                    }
                 }
             };
         }
@@ -769,6 +830,11 @@
 
         function displayResult(data) {
             resultDiv.style.display = 'block';
+            
+            // Auto-scroll to show the result
+            setTimeout(() => {
+                resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
             
             // Whisper Small results (present only in development UI)
             const smallText = document.getElementById('smallText');
