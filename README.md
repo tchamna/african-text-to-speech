@@ -17,6 +17,13 @@ This project serves as a demonstration of applying modern AI to low-resource lan
 Try the live version of AfricanVoice deployed on Azure:  
 **[https://african-text-to-speech-ehajh7daazdfhzft.canadacentral-01.azurewebsites.net/](https://african-text-to-speech-ehajh7daazdfhzft.canadacentral-01.azurewebsites.net/)**
 
+<p align="center">
+   <img src="assets/demo_image.png" alt="AfricanVoice demo 1" width="480" style="margin-right:12px;" />
+   <img src="assets/demo_image2.png" alt="AfricanVoice demo 2" width="480" />
+</p>
+
+_Figure: Top — main UI (record & results). Bottom — semantic matches and Nufi playback._
+
 No installation required - just click the link and start speaking!
 
 ## 🧠 Key AI & Machine Learning Features
