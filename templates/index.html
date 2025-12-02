@@ -30,6 +30,25 @@
             transition: all 0.3s ease;
             margin: 10px;
         }
+
+        /* Professional theme toggle button */
+        .theme-toggle {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            padding: 8px 12px;
+            font-size: 13px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.08));
+            color: #f1f5f9;
+            box-shadow: 0 2px 6px rgba(2,6,23,0.4);
+            cursor: pointer;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+        }
+        .theme-toggle:hover { transform: translateY(-1px); opacity: 0.95; }
+        .theme-toggle:active { transform: translateY(0); }
+        .theme-toggle.light { background: #ffffff; color: #111827; border: 1px solid rgba(16,24,40,0.06); box-shadow: 0 2px 6px rgba(16,24,40,0.06); }
         #recordBtn {
             background-color: #e74c3c;
             color: white;
@@ -106,15 +125,160 @@
             0% { transform: translateX(0); }
             100% { transform: translateX(-100%); }
         }
+
+        /* Phrase button styles for both themes */
+        .phrase-btn {
+            padding: 8px 16px;
+            background-color: #e8f4f8;
+            border: 1px solid #3498db;
+            border-radius: 5px;
+            color: #2c3e50;
+            font-size: 14px;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+        .phrase-btn:hover {
+            background-color: #d1ecf1;
+            border-color: #2980b9;
+        }
+        .try-phrase-btn {
+            background-color: #f8f9fa;
+            border-color: #6c757d;
+        }
+        .try-phrase-btn:hover {
+            background-color: #e9ecef;
+        }
+
+        .info-banner {
+            background-color: #fff3cd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #856404;
+        }
+
+        /* Modern Theme Styles */
+        body.modern {
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #f1f5f9;
+        }
+        .modern .container {
+            background-color: #2c2c2c;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .modern h1 {
+            color: #60a5fa;
+        }
+        .modern p {
+            color: #cbd5e1;
+        }
+        .modern p:last-of-type {
+            color: #94a3b8;
+        }
+        .modern .info-banner {
+            background-color: #fff3cd !important;
+            color: #111827 !important;
+            border: 1px solid #fcd34d !important;
+        }
+        .modern .info-banner strong {
+            color: #111827 !important;
+        }
+        .modern .scrolling-wrapper {
+            background-color: #374151;
+            border-left-color: #60a5fa;
+        }
+        .modern .scrolling-text {
+            color: #e2e8f0;
+        }
+        .modern .controls {
+            margin: 30px 0;
+        }
+        .modern .controls label {
+            color: #e2e8f0;
+        }
+        .modern select, .modern input {
+            background-color: #374151;
+            border-color: #60a5fa;
+            color: #f1f5f9;
+        }
+        .modern #recordBtn {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .modern #recordBtn.recording {
+            background-color: #c0392b;
+        }
+        .modern .dropzone {
+            border-color: #60a5fa;
+            background-color: #374151;
+        }
+        .modern .dropzone:hover {
+            background-color: #4b5563;
+            border-color: #60a5fa;
+        }
+        .modern .dropzone h3 {
+            color: #60a5fa;
+        }
+        .modern .dropzone p {
+            color: #cbd5e1;
+        }
+        .modern .result-box {
+            border-color: #4b5563;
+            background-color: #1f2937;
+            color: #e2e8f0;
+        }
+        .modern .result-box > h3 {
+            color: #f8fafc;
+        }
+        .modern #smallResult,
+        .modern #mediumResult,
+        .modern #largeResult,
+        .modern #comparisonResult,
+        .modern #topMatchesSection {
+            color: #111827;
+        }
+        .modern #result p,
+        .modern #result strong,
+        .modern #result span,
+        .modern #result .translation,
+        .modern #result .transcription {
+            color: #111827 !important;
+        }
+        .modern #smallResult h4,
+        .modern #mediumResult h4,
+        .modern #largeResult h4,
+        .modern #comparisonResult h4,
+        .modern #topMatchesSection h4 {
+            color: inherit;
+        }
+        .modern #topMatchesSection strong {
+            color: inherit;
+        }
+        .modern .transcription {
+            color: #475569;
+        }
+        .modern .translation {
+            color: #15803d;
+        }
+        .modern .status {
+            color: #cbd5e1;
+        }
+        .modern #silenceValue {
+            color: #fbbf24;
+        }
     </style>
 </head>
-<body>
+<body class="modern">
     <div class="container">
+        <button id="themeToggle" class="theme-toggle" aria-pressed="true">Light Mode</button>
         <h1>AfricanVoice 🎙️ By Resulam</h1>
         <p>Parlez en français, anglais ou espagnol pour obtenir la traduction en Nufi.</p>
         <p style="font-size: 14px; color: #7f8c8d;">Speak in French, English, or Spanish to get the Nufi translation.</p>
-        <div style="background-color: #fff3cd; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 14px;">
-            <strong>📝 Tips:</strong> Click record, wait 1 second, then speak clearly for 2-3 seconds. Allow microphone access when prompted.
+        <div class="info-banner">
+            <strong>📝 Tips:</strong> Click record, and allow microphone access when prompted.
         </div>
 
 
@@ -181,7 +345,7 @@
             {% endif %}
             
             <!-- Whisper Large-v3 Result -->
-            <div style="background: #e8f4e8; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #27ae60;">
+            <div id="largeResult" style="background: #e8f4e8; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #27ae60;">
                 <h4 style="margin: 0 0 10px 0; color: #229954;">🟢 Whisper Large-v3 (~2.87GB - Most Accurate)</h4>
                 <p style="margin: 5px 0;"><strong>Transcription:</strong> <span id="largeText" class="transcription"></span></p>
                 <p style="margin: 5px 0;"><strong>Matched French:</strong> <span id="largeMatch" style="font-weight: bold; color: #2c3e50;"></span></p>
@@ -213,6 +377,38 @@
     </div>
 
     <script>
+        // Theme toggle functionality
+        document.addEventListener('DOMContentLoaded', function() {
+                const themeToggle = document.getElementById('themeToggle');
+                const body = document.body;
+
+                // Initialize button state on load
+                function updateThemeToggle() {
+                    const isDark = body.classList.contains('modern');
+                    themeToggle.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+                    themeToggle.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+                    // apply light variant class when showing 'Dark Mode' (meaning currently light)
+                    if (isDark) themeToggle.classList.remove('light');
+                    else themeToggle.classList.add('light');
+                }
+
+                themeToggle.addEventListener('click', function() {
+                    if (body.classList.contains('modern')) {
+                        body.classList.remove('modern');
+                    } else {
+                        body.classList.add('modern');
+                    }
+                    updateThemeToggle();
+                });
+
+                // Run once to set initial label/appearance
+                updateThemeToggle();
+        });
+
+        function setPhrase(phrase) {
+            alert('Phrase selected: ' + phrase + '\n\nPlease speak this phrase into the microphone when recording.');
+        }
+
         // --- Configuration for Scrolling Text ---
         const examplePhrases = [
             "Salut", 
