@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AfricanVoice - Transcribe & Email</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+            background-color: #1a1a1a;
+            color: #f1f5f9;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            background-color: #2c2c2c;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #60a5fa;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #94a3b8;
+            margin-bottom: 30px;
+        }
+        .back-link {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #60a5fa;
+            text-decoration: none;
+            font-size: 14px;
+            padding: 8px 16px;
+            border: 1px solid #60a5fa;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .back-link:hover {
+            background-color: #60a5fa;
+            color: #1a1a1a;
+        }
+        .step {
+            background-color: #374151;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border-left: 4px solid #60a5fa;
+            text-align: left;
+        }
+        .step-number {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            background-color: #60a5fa;
+            color: #1a1a1a;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 32px;
+            font-weight: bold;
+            margin-right: 12px;
+        }
+        .step-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin-bottom: 15px;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        .controls label {
+            color: #e2e8f0;
+            font-weight: 500;
+            margin-right: 10px;
+        }
+        select {
+            padding: 10px 15px;
+            font-size: 14px;
+            border-radius: 8px;
+            border: 2px solid #60a5fa;
+            background-color: #374151;
+            color: #f1f5f9;
+            cursor: pointer;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+        #recordBtn {
+            background-color: #e74c3c;
+            color: white;
+            width: 100%;
+            max-width: 300px;
+        }
+        #recordBtn:hover {
+            background-color: #c0392b;
+        }
+        #recordBtn.recording {
+            background-color: #c0392b;
+            animation: pulse 1.5s infinite;
+        }
+        #recordBtn:disabled {
+            background-color: #6b7280;
+            cursor: not-allowed;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .transcription-box {
+            background-color: #1f2937;
+            border: 2px solid #4b5563;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 120px;
+            margin-top: 15px;
+            text-align: left;
+            font-size: 18px;
+            color: #e2e8f0;
+            line-height: 1.6;
+            width: 100%;
+            resize: vertical;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        .transcription-box:focus {
+            outline: none;
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+        }
+        .transcription-box::placeholder {
+            color: #6b7280;
+            font-style: italic;
+        }
+        .email-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+        .email-input {
+            width: 100%;
+            max-width: 400px;
+            padding: 15px 20px;
+            font-size: 16px;
+            border-radius: 10px;
+            border: 2px solid #4b5563;
+            background-color: #1f2937;
+            color: #f1f5f9;
+            text-align: center;
+        }
+        .email-input:focus {
+            outline: none;
+            border-color: #60a5fa;
+        }
+        .email-input::placeholder {
+            color: #6b7280;
+        }
+        #sendBtn {
+            background-color: #10b981;
+            color: white;
+            width: 100%;
+            max-width: 300px;
+        }
+        #sendBtn:hover {
+            background-color: #059669;
+        }
+        #sendBtn:disabled {
+            background-color: #6b7280;
+            cursor: not-allowed;
+        }
+        #downloadBtn {
+            background-color: #8b5cf6;
+            color: white;
+            width: 100%;
+            max-width: 300px;
+        }
+        #downloadBtn:hover {
+            background-color: #7c3aed;
+        }
+        #downloadBtn:disabled {
+            background-color: #6b7280;
+            cursor: not-allowed;
+        }
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        .divider {
+            color: #6b7280;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        .status {
+            margin-top: 15px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+        .status.info {
+            background-color: #1e40af;
+            color: #bfdbfe;
+            display: block;
+        }
+        .status.success {
+            background-color: #065f46;
+            color: #a7f3d0;
+            display: block;
+        }
+        .status.error {
+            background-color: #991b1b;
+            color: #fecaca;
+            display: block;
+        }
+        .language-detected {
+            font-size: 14px;
+            color: #9ca3af;
+            margin-top: 10px;
+        }
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-link">← Back to Translator</a>
+    
+    <div class="container">
+        <h1>🎙️ Transcribe & Email - by Resulam</h1>
+        <p class="subtitle">Record your voice, get a transcription, and receive it by email</p>
+
+        <!-- Support Banner with PayPal Button -->
+        <div style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 15px; margin: 15px 0 25px 0; padding: 16px 24px; background: linear-gradient(135deg, #8b5cf6 0%, #d946ef 50%, #f43f5e 100%); border-radius: 12px; color: white; box-shadow: 0 8px 30px rgba(139, 92, 246, 0.35);">
+            <span style="font-size: 1em;">💜 Help us keep this free — cover hosting & improve AI!</span>
+            <form action="https://www.paypal.com/donate" method="post" target="_blank" style="margin: 0;">
+                <input type="hidden" name="business" value="SWMEVEFA266UJ" />
+                <input type="hidden" name="no_recurring" value="0" />
+                <input type="hidden" name="item_name" value="Support AfricanVoice Transcription. Your donation helps:&#10;• Cover development costs&#10;• Fine-tune AI models&#10;• Pay hosting fees&#10;Thank you for supporting African languages!" />
+                <input type="hidden" name="currency_code" value="USD" />
+                <button type="submit" style="background: white; color: #8b5cf6; border: none; padding: 10px 24px; font-size: 0.9em; font-weight: 600; border-radius: 25px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); transition: all 0.3s ease; margin: 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="#0070ba">
+                        <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944 3.72a.773.773 0 0 1 .763-.648h6.012c2.678 0 4.673 1.894 4.258 4.678-.454 3.045-2.878 4.857-5.832 4.857H7.825l-.749 9.73zm12.147-15.627c-.147.985-.6 1.857-1.283 2.519-.684.661-1.565 1.08-2.547 1.227l-.097.014h-2.098l-.625 4.011a.641.641 0 0 1-.633.549H9.746l.08-.519.172-1.118.453-2.923.008-.052.126-.815.127-.82.008-.052h2.584c3.523 0 6.127-2.286 6.719-5.557.238-1.316.088-2.472-.488-3.348-.563-.856-1.488-1.41-2.698-1.63.177.02.35.046.52.078 1.617.305 2.748 1.156 3.224 2.436.273.734.328 1.564.153 2.5z"/>
+                    </svg>
+                    Donate
+                </button>
+            </form>
+        </div>
+
+        <!-- Step 1: Record -->
+        <div class="step">
+            <div class="step-title">
+                <span class="step-number">1</span>
+                Record Your Voice
+            </div>
+            <div class="controls">
+                <label for="languageSelect">🌍 Language:</label>
+                <select id="languageSelect">
+                    <option value="auto">Auto-detect</option>
+                    <option value="fr">French (Français)</option>
+                    <option value="en">English</option>
+                    <option value="es">Spanish (Español)</option>
+                    <option value="de">German (Deutsch)</option>
+                    <option value="it">Italian (Italiano)</option>
+                    <option value="pt">Portuguese (Português)</option>
+                </select>
+            </div>
+            <button id="recordBtn">🎤 Start Recording</button>
+            <div id="recordStatus" class="status"></div>
+        </div>
+
+        <!-- Step 2: View/Edit Transcription -->
+        <div class="step">
+            <div class="step-title">
+                <span class="step-number">2</span>
+                Your Text <span style="font-size: 0.7em; color: #9ca3af; font-weight: normal;">(type, paste, or record)</span>
+            </div>
+            <textarea id="transcriptionBox" class="transcription-box" placeholder="Type or paste your text here, or use the recording button above..."></textarea>
+            <div id="languageDetected" class="language-detected hidden"></div>
+        </div>
+
+        <!-- Step 3: Send Email or Download -->
+        <div class="step">
+            <div class="step-title">
+                <span class="step-number">3</span>
+                Save Your Transcription
+            </div>
+            <div class="email-section">
+                <input type="email" id="emailInput" class="email-input" placeholder="Enter your email address" />
+                <div class="action-buttons">
+                    <button id="sendBtn" disabled>📧 Send to Email</button>
+                    <button id="downloadBtn" disabled>📥 Download as Text</button>
+                </div>
+            </div>
+            <div id="emailStatus" class="status"></div>
+        </div>
+    </div>
+
+    <script>
+        // Elements
+        const recordBtn = document.getElementById('recordBtn');
+        const recordStatus = document.getElementById('recordStatus');
+        const transcriptionBox = document.getElementById('transcriptionBox');
+        const languageDetected = document.getElementById('languageDetected');
+        const emailInput = document.getElementById('emailInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const emailStatus = document.getElementById('emailStatus');
+        const languageSelect = document.getElementById('languageSelect');
+
+        // State
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let currentTranscription = '';
+        let detectedLanguage = '';
+
+        // Recording logic
+        recordBtn.addEventListener('click', toggleRecording);
+
+        async function toggleRecording() {
+            if (!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = async () => {
+                        showStatus(recordStatus, 'Processing your recording...', 'info');
+                        recordBtn.disabled = true;
+
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await transcribeAudio(audioBlob);
+
+                        recordBtn.disabled = false;
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    recordBtn.textContent = '⏹️ Stop Recording';
+                    recordBtn.classList.add('recording');
+                    showStatus(recordStatus, 'Recording... Speak now!', 'info');
+
+                } catch (err) {
+                    console.error('Microphone access error:', err);
+                    showStatus(recordStatus, 'Error: Could not access microphone. Please allow permissions.', 'error');
+                }
+            } else {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                isRecording = false;
+                recordBtn.textContent = '🎤 Start Recording';
+                recordBtn.classList.remove('recording');
+            }
+        }
+
+        async function transcribeAudio(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+            formData.append('language', languageSelect.value);
+
+            try {
+                const response = await fetch('/transcribe_only', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.transcription) {
+                    currentTranscription = data.transcription;
+                    detectedLanguage = data.detected_language || 'unknown';
+
+                    transcriptionBox.value = currentTranscription;
+
+                    languageDetected.textContent = `Detected language: ${getLanguageName(detectedLanguage)}`;
+                    languageDetected.classList.remove('hidden');
+
+                    sendBtn.disabled = false;
+                    downloadBtn.disabled = false;
+                    hideStatus(recordStatus);
+
+                } else {
+                    showStatus(recordStatus, data.error || 'Failed to transcribe. Please try again.', 'error');
+                    resetTranscription();
+                }
+
+            } catch (err) {
+                console.error('Transcription error:', err);
+                showStatus(recordStatus, 'Network error. Please try again.', 'error');
+                resetTranscription();
+            }
+        }
+
+        function resetTranscription() {
+            currentTranscription = '';
+            detectedLanguage = '';
+            transcriptionBox.value = '';
+            languageDetected.classList.add('hidden');
+            sendBtn.disabled = true;
+            downloadBtn.disabled = true;
+        }
+
+        // Download transcription as text file
+        downloadBtn.addEventListener('click', downloadTranscription);
+
+        function downloadTranscription() {
+            const textToDownload = transcriptionBox.value.trim();
+            if (!textToDownload) {
+                showStatus(emailStatus, 'No transcription to download. Please record or type something first.', 'error');
+                return;
+            }
+
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+            const filename = `transcription-${timestamp}.txt`;
+            
+            const content = `AfricanVoice Transcription
+Generated: ${new Date().toLocaleString()}
+Language: ${getLanguageName(detectedLanguage) || 'Not specified'}
+
+---
+
+${textToDownload}
+
+---
+Powered by AfricanVoice - AI Voice Translator
+https://african-text-to-speech-ehajh7daazdfhzft.canadacentral-01.azurewebsites.net/
+`;
+
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            showStatus(emailStatus, `✅ Downloaded: ${filename}`, 'success');
+        }
+
+        // Email sending
+        sendBtn.addEventListener('click', sendEmail);
+
+        async function sendEmail() {
+            const email = emailInput.value.trim();
+            const textToSend = transcriptionBox.value.trim();
+
+            if (!email) {
+                showStatus(emailStatus, 'Please enter your email address.', 'error');
+                return;
+            }
+
+            if (!textToSend) {
+                showStatus(emailStatus, 'No transcription to send. Please record or type something first.', 'error');
+                return;
+            }
+
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<span class="loader"></span> Sending...';
+
+            try {
+                const response = await fetch('/send_transcription', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        transcription: textToSend,
+                        language: getLanguageName(detectedLanguage) || 'Not specified'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    let msg = `✅ ${data.message}`;
+                    if (data.demo_mode) {
+                        msg += ' (Demo mode - email not actually sent)';
+                    }
+                    showStatus(emailStatus, msg, 'success');
+                } else {
+                    showStatus(emailStatus, data.error || 'Failed to send email.', 'error');
+                }
+
+            } catch (err) {
+                console.error('Email send error:', err);
+                showStatus(emailStatus, 'Network error. Please try again.', 'error');
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '📧 Send Transcription';
+            }
+        }
+
+        // Utility functions
+        function showStatus(element, message, type) {
+            element.textContent = message;
+            element.className = 'status ' + type;
+        }
+
+        function hideStatus(element) {
+            element.className = 'status';
+        }
+
+        function getLanguageName(code) {
+            const languages = {
+                'fr': 'French',
+                'en': 'English',
+                'es': 'Spanish',
+                'de': 'German',
+                'it': 'Italian',
+                'pt': 'Portuguese',
+                'auto': 'Auto-detected',
+                'unknown': 'Unknown'
+            };
+            return languages[code] || code;
+        }
+
+        // Enable send button when email is entered and transcription exists
+        emailInput.addEventListener('input', updateButtonStates);
+        transcriptionBox.addEventListener('input', updateButtonStates);
+
+        function updateButtonStates() {
+            const hasText = transcriptionBox.value.trim().length > 0;
+            const hasEmail = emailInput.value.trim().length > 0;
+            sendBtn.disabled = !hasEmail || !hasText;
+            downloadBtn.disabled = !hasText;
+        }
+    </script>
+</body>
+</html>

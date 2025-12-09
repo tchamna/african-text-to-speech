@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file
+
 import pandas as pd
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import whisper
@@ -11,6 +14,7 @@ from datetime import datetime
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 import torch
 import soundfile as sf
+import requests  # For Brevo and Mailjet API calls
 
 app = Flask(__name__)
 APP_MODE = os.environ.get('APP_MODE', 'development')
@@ -614,6 +618,259 @@ def process_audio():
         # Cleanup
         if os.path.exists(temp_input):
             os.remove(temp_input)
+
+
+# ========== EMAIL TRANSCRIPTION FEATURE ==========
+
+# Email configuration using Brevo (primary) and Mailjet (fallback)
+# Get free API keys from:
+# - Brevo: https://www.brevo.com/ (300 emails/day free)
+# - Mailjet: https://www.mailjet.com/ (200 emails/day free)
+
+# Brevo (formerly Sendinblue) - Primary
+BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
+BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL', '')
+
+# Mailjet - Fallback
+MAILJET_API_KEY = os.environ.get('MAILJET_API_KEY', '')
+MAILJET_SECRET_KEY = os.environ.get('MAILJET_SECRET_KEY', '')
+MAILJET_SENDER_EMAIL = os.environ.get('MAILJET_SENDER_EMAIL', '')
+
+# Sender display name
+EMAIL_FROM_NAME = os.environ.get('EMAIL_FROM_NAME', 'AfricanVoice Transcription')
+
+
+@app.route('/transcribe-email')
+def transcribe_email_page():
+    """Render the email transcription page"""
+    return render_template('transcribe_email.html')
+
+
+@app.route('/transcribe_only', methods=['POST'])
+def transcribe_only():
+    """
+    Transcribe audio without translation lookup.
+    Returns just the transcription text.
+    """
+    if 'audio' not in request.files:
+        return jsonify({'error': 'No audio file provided'}), 400
+
+    audio_file = request.files['audio']
+    language = request.form.get('language', 'auto')
+
+    # Save temporarily
+    temp_input = os.path.join(UPLOAD_FOLDER, 'temp_transcribe_input.webm')
+    audio_file.save(temp_input)
+
+    try:
+        # Transcribe with Whisper
+        options = {'fp16': False}
+        if language and language != 'auto':
+            options['language'] = language
+
+        result = whisper_model.transcribe(temp_input, **options)
+        transcription = result['text'].strip()
+        detected_lang = result.get('language', 'unknown')
+
+        if not transcription:
+            return jsonify({
+                'error': 'No speech detected. Please speak clearly and try again.',
+                'transcription': ''
+            }), 400
+
+        return jsonify({
+            'transcription': transcription,
+            'detected_language': detected_lang,
+            'model_used': WHISPER_MODEL_SIZE
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'Transcription error: {str(e)}'}), 500
+    finally:
+        if os.path.exists(temp_input):
+            os.remove(temp_input)
+
+
+def send_email_brevo(to_email, subject, text_content, html_content):
+    """
+    Send email using Brevo (Sendinblue) API.
+    Returns (success: bool, error_message: str or None)
+    """
+    if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
+        return False, 'Brevo API key or sender email not configured'
+    
+    url = 'https://api.brevo.com/v3/smtp/email'
+    headers = {
+        'accept': 'application/json',
+        'api-key': BREVO_API_KEY,
+        'content-type': 'application/json'
+    }
+    payload = {
+        'sender': {'name': EMAIL_FROM_NAME, 'email': BREVO_SENDER_EMAIL},
+        'to': [{'email': to_email}],
+        'subject': subject,
+        'textContent': text_content,
+        'htmlContent': html_content
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        if response.status_code in [200, 201]:
+            print(f"[BREVO] Email sent successfully to {to_email}")
+            return True, None
+        else:
+            error_msg = response.json().get('message', response.text)
+            print(f"[BREVO] Failed: {response.status_code} - {error_msg}")
+            return False, f'Brevo error: {error_msg}'
+    except requests.exceptions.Timeout:
+        return False, 'Brevo request timed out'
+    except Exception as e:
+        return False, f'Brevo exception: {str(e)}'
+
+
+def send_email_mailjet(to_email, subject, text_content, html_content):
+    """
+    Send email using Mailjet API (fallback).
+    Returns (success: bool, error_message: str or None)
+    """
+    if not MAILJET_API_KEY or not MAILJET_SECRET_KEY or not MAILJET_SENDER_EMAIL:
+        return False, 'Mailjet API keys or sender email not configured'
+    
+    url = 'https://api.mailjet.com/v3.1/send'
+    auth = (MAILJET_API_KEY, MAILJET_SECRET_KEY)
+    payload = {
+        'Messages': [{
+            'From': {'Email': MAILJET_SENDER_EMAIL, 'Name': EMAIL_FROM_NAME},
+            'To': [{'Email': to_email}],
+            'Subject': subject,
+            'TextPart': text_content,
+            'HTMLPart': html_content
+        }]
+    }
+    
+    try:
+        response = requests.post(url, json=payload, auth=auth, timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('Messages', [{}])[0].get('Status') == 'success':
+                print(f"[MAILJET] Email sent successfully to {to_email}")
+                return True, None
+        error_msg = response.text
+        print(f"[MAILJET] Failed: {response.status_code} - {error_msg}")
+        return False, f'Mailjet error: {error_msg}'
+    except requests.exceptions.Timeout:
+        return False, 'Mailjet request timed out'
+    except Exception as e:
+        return False, f'Mailjet exception: {str(e)}'
+
+
+@app.route('/send_transcription', methods=['POST'])
+def send_transcription():
+    """
+    Send the transcription to the user's email address.
+    Uses Brevo as primary, Mailjet as fallback.
+    Expects JSON: { email: string, transcription: string, language: string }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    email = data.get('email', '').strip()
+    transcription = data.get('transcription', '').strip()
+    language = data.get('language', 'unknown')
+
+    if not email:
+        return jsonify({'error': 'Email address is required'}), 400
+    if not transcription:
+        return jsonify({'error': 'No transcription to send'}), 400
+
+    # Basic email validation
+    import re
+    if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
+        return jsonify({'error': 'Invalid email address'}), 400
+
+    # Check if any email service is configured
+    has_brevo = bool(BREVO_API_KEY and BREVO_SENDER_EMAIL)
+    has_mailjet = bool(MAILJET_API_KEY and MAILJET_SECRET_KEY and MAILJET_SENDER_EMAIL)
+    
+    if not has_brevo and not has_mailjet:
+        # Demo mode - no email services configured
+        print(f"[EMAIL DEMO] Would send to: {email}")
+        print(f"[EMAIL DEMO] Transcription: {transcription}")
+        return jsonify({
+            'success': True,
+            'message': f'Transcription sent to {email}',
+            'demo_mode': True
+        })
+
+    # Prepare email content
+    subject = 'Your AfricanVoice Transcription'
+    
+    text_content = f"""AfricanVoice Transcription
+
+Your recorded speech has been transcribed:
+
+"{transcription}"
+
+Detected Language: {language}
+
+---
+Powered by AfricanVoice - AI Voice Translator
+https://african-text-to-speech-ehajh7daazdfhzft.canadacentral-01.azurewebsites.net/"""
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; background-color: #1a1a1a; color: #f1f5f9; padding: 20px; }}
+        .container {{ max-width: 600px; margin: 0 auto; background-color: #2c2c2c; padding: 30px; border-radius: 15px; }}
+        h1 {{ color: #60a5fa; }}
+        .transcription {{ background-color: #374151; padding: 20px; border-radius: 10px; border-left: 4px solid #60a5fa; margin: 20px 0; font-size: 18px; }}
+        .language {{ color: #9ca3af; font-size: 14px; }}
+        .footer {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #4b5563; color: #9ca3af; font-size: 12px; }}
+        a {{ color: #60a5fa; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ AfricanVoice Transcription</h1>
+        <p>Your recorded speech has been transcribed:</p>
+        <div class="transcription">
+            "{transcription}"
+        </div>
+        <p class="language">Detected Language: <strong>{language}</strong></p>
+        <div class="footer">
+            <p>Powered by <a href="https://african-text-to-speech-ehajh7daazdfhzft.canadacentral-01.azurewebsites.net/">AfricanVoice</a> - AI Voice Translator</p>
+        </div>
+    </div>
+</body>
+</html>"""
+
+    # Try Brevo first, then Mailjet as fallback
+    provider_used = None
+    
+    if has_brevo:
+        success, error = send_email_brevo(email, subject, text_content, html_content)
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Transcription sent to {email}',
+                'provider': 'brevo'
+            })
+        print(f"Brevo failed, trying Mailjet fallback: {error}")
+    
+    if has_mailjet:
+        success, error = send_email_mailjet(email, subject, text_content, html_content)
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Transcription sent to {email}',
+                'provider': 'mailjet'
+            })
+        return jsonify({'error': f'Email sending failed: {error}'}), 500
+    
+    return jsonify({'error': 'All email services failed'}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

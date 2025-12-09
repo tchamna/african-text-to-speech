@@ -92,11 +92,20 @@ AfricanVoice/
 │   ├── faiss_index.bin    # Pre-computed vector index
 │   └── index_mapping.pkl  # Index-to-Dataframe mapping
 ├── templates/
-│   └── index.html         # Responsive Frontend UI
+│   ├── index.html         # Main Voice Translator UI
+│   └── transcribe_email.html # Transcribe & Email/Download UI
 ├── tests/
 │   └── build_index.py     # Script to generate FAISS index
 └── audio/                 # Local audio cache (optional)
 ```
+
+## 🌐 Available Routes
+
+| Route | Description |
+|-------|-------------|
+| `/` | Main voice translator - speak in French/English/Spanish and get Nufi translations |
+| `/transcribe-email` | Transcribe speech or type text, then email or download the result |
+| `/debug` | Debug interface for testing semantic search |
 
 ## ⚡ Quick Start
 
